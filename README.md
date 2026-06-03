@@ -2,6 +2,8 @@
 
 AnyAuth is a local-first authentication hub for developers and solo builders.
 
+Repository: https://github.com/yukunlabs/anyauth
+
 The first milestone is intentionally small: run a local OpenID Connect-style
 provider and two demo apps to prove local SSO across apps you own.
 
@@ -73,6 +75,15 @@ See [docs/stack-decision.md](docs/stack-decision.md).
 ```bash
 go test ./...
 go run ./cmd/anyauth serve
+```
+
+Or use `make`:
+
+```bash
+make fmt
+make test
+make build
+make run
 ```
 
 Build a local binary:
