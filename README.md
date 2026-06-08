@@ -156,3 +156,5 @@ go build -o bin/anyauth ./cmd/anyauth
 During the experimental phase, every commit should be a closed loop and release
 tags should only be created when explicitly planned. See
 [docs/development-process.md](docs/development-process.md).
+
+AI agents should start with [AGENTS.md](AGENTS.md).

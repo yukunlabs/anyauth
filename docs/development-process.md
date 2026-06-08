@@ -29,6 +29,19 @@ Do not create release tags during the experimental phase.
 Use normal commits on `main` for iteration. Create a tag or GitHub Release only
 when we explicitly decide a milestone is stable enough to name and preserve.
 
+## Documentation Policy
+
+Commit public project docs that explain product behavior, security boundaries,
+architecture decisions, and development workflow. These docs are part of the
+project surface and help future AI agents and human contributors work with the
+same context.
+
+Do not commit private ideation, credentials, rough personal notes, or sensitive
+market research. Keep those in local ignored notes outside the public project
+docs.
+
+AI agents should read `AGENTS.md` first when entering the repository.
+
 ## Suggested Commit Shape
 
 Prefer small commits that can be described as:
