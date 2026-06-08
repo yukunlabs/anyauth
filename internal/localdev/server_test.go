@@ -9,12 +9,16 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/yukunlabs/anyauth/internal/agentregistry"
 	"github.com/yukunlabs/anyauth/internal/clientregistry"
+	"github.com/yukunlabs/anyauth/internal/delegation"
+	"github.com/yukunlabs/anyauth/internal/jose"
 	"github.com/yukunlabs/anyauth/internal/userstore"
 )
 
@@ -371,6 +375,132 @@ func TestProtectGatewayFlow(t *testing.T) {
 	}
 	if strings.Contains(body, "spoofed@example.com") {
 		t.Fatalf("protected proxy forwarded spoofed identity header: %s", body)
+	}
+}
+
+func TestProtectGatewayWithDelegation(t *testing.T) {
+	dataDir := t.TempDir()
+	providerPort := freePort(t)
+	protectPort := freePort(t)
+	agent, err := agentregistry.Add(dataDir, agentregistry.Agent{
+		ID:   "codex",
+		Name: "Codex Local Agent",
+		Kind: "cli",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := jose.LoadOrCreateRSAKey(filepath.Join(dataDir, "dev-private-key.pem"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, token, err := delegation.Create(dataDir, delegation.CreateRequest{
+		Issuer:   delegation.IssuerForProviderPort(providerPort),
+		Audience: delegation.AudienceForProtectPort(protectPort),
+		Human:    userstore.DefaultProfile(),
+		Agent:    agent,
+		Scopes:   []string{"app.read", "app.write"},
+		Note:     "protect gateway test",
+		TTL:      30 * time.Minute,
+		Key:      key,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "path=%s authenticated=%s actor=%s sub=%s human=%s agent=%s delegation=%s scopes=%s authz=%s",
+			r.URL.String(),
+			r.Header.Get("X-AnyAuth-Authenticated"),
+			r.Header.Get("X-AnyAuth-Actor-Type"),
+			r.Header.Get("X-AnyAuth-Sub"),
+			r.Header.Get("X-AnyAuth-Human-Sub"),
+			r.Header.Get("X-AnyAuth-Agent-ID"),
+			r.Header.Get("X-AnyAuth-Delegation-ID"),
+			r.Header.Get("X-AnyAuth-Scopes"),
+			r.Header.Get("Authorization"),
+		)
+	}))
+	defer upstream.Close()
+
+	cfg := Config{
+		ProviderPort:      providerPort,
+		ProtectPort:       protectPort,
+		ProtectUpstream:   upstream.URL,
+		DataDir:           dataDir,
+		RequireDelegation: true,
+	}
+	servers, cfg, err := Start(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := servers.Shutdown(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	client := &http.Client{}
+	gateway := "http://127.0.0.1:" + itoa(cfg.ProtectPort)
+
+	body := mustGetBody(t, client, gateway+"/private?x=1", http.StatusUnauthorized)
+	if !strings.Contains(body, "delegation bearer token is required") {
+		t.Fatalf("expected missing token failure, got %s", body)
+	}
+
+	req, err := http.NewRequest(http.MethodGet, gateway+"/private?x=1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-AnyAuth-Agent-ID", "spoofed-agent")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("delegated request status = %d, want 200, body: %s", resp.StatusCode, string(raw))
+	}
+	body = string(raw)
+	for _, want := range []string{
+		"path=/private?x=1",
+		"authenticated=true",
+		"actor=agent",
+		"sub=local-user",
+		"human=local-user",
+		"agent=codex",
+		"delegation=" + record.ID,
+		"scopes=app.read app.write",
+		"authz=",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("delegated upstream body missing %q from %s", want, body)
+		}
+	}
+	if strings.Contains(body, "spoofed-agent") || strings.Contains(body, token) {
+		t.Fatalf("protected proxy leaked spoofed header or token: %s", body)
+	}
+
+	req, err = http.NewRequest(http.MethodGet, gateway+"/private", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token[:len(token)-1]+"x")
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		raw, _ := io.ReadAll(resp.Body)
+		t.Fatalf("tampered token status = %d, want 401, body: %s", resp.StatusCode, string(raw))
 	}
 }
 

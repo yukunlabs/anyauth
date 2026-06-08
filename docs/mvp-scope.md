@@ -4,7 +4,9 @@
 
 Build a runnable local provider that proves AnyAuth can act as an identity hub
 for apps owned by the same developer, a protected proxy mode for local apps, and
-a built-in demo mode for local SSO validation.
+a built-in demo mode for local SSO validation. The MVP also proves a first
+agent authorization path where a registered local agent can access a protected
+upstream app through a short-lived delegation token.
 
 ## In Scope
 
@@ -16,6 +18,8 @@ a built-in demo mode for local SSO validation.
 - One local user
 - Optional local PIN verification before provider session creation
 - Persistent local client registry
+- Persistent local agent registry
+- Persistent local delegation records without storing token plaintext
 - In-memory authorization codes, access tokens, and sessions
 - Discovery endpoint
 - JWKS endpoint
@@ -23,9 +27,12 @@ a built-in demo mode for local SSO validation.
 - RS256 ID token signing through a local RSA key
 - Reverse proxy to one local upstream app
 - Identity headers for authenticated upstream requests
+- Agent-aware identity and delegation headers for delegated upstream requests
 - Single Go binary entrypoint through `cmd/anyauth`
 - `serve`, `protect`, and `demo` CLI commands
 - `clients add` and `clients list` CLI commands
+- `agents add`, `agents list`, and `agents remove` CLI commands
+- `delegate create`, `delegate list`, and `delegate revoke` CLI commands
 - `user show`, `user set-pin`, and `user clear-pin` CLI commands
 
 ## Out Of Scope
@@ -40,6 +47,8 @@ a built-in demo mode for local SSO validation.
 - SAML / LDAP
 - Upstream Google/GitHub login
 - Arbitrary third-party website login
+- Operation-level policy enforcement inside upstream apps
+- Full interactive approval UI for agent actions
 
 ## Success Criteria
 
@@ -47,6 +56,10 @@ a built-in demo mode for local SSO validation.
 - In demo mode, opening Demo App B reuses the AnyAuth provider session.
 - In protect mode, an unauthenticated request is redirected to AnyAuth and then
   proxied to the upstream app with identity headers.
+- In agent delegation mode, a request with a valid delegation Bearer token is
+  proxied to the upstream app with human, agent, delegation, and scope headers.
+- In agent delegation mode, a request without a valid delegation token returns
+  `401`.
 - The provider exposes standard-looking OIDC metadata and JWKS.
 - The repo explains the security boundary clearly.
 - The first implementation has no third-party Go dependencies.

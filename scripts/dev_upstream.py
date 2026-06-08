@@ -5,9 +5,18 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 ANYAUTH_HEADERS = [
     "X-AnyAuth-Authenticated",
+    "X-AnyAuth-Actor-Type",
     "X-AnyAuth-Sub",
     "X-AnyAuth-Name",
     "X-AnyAuth-Email",
+    "X-AnyAuth-Human-Sub",
+    "X-AnyAuth-Human-Name",
+    "X-AnyAuth-Human-Email",
+    "X-AnyAuth-Agent-ID",
+    "X-AnyAuth-Agent-Name",
+    "X-AnyAuth-Delegation-ID",
+    "X-AnyAuth-Token-ID",
+    "X-AnyAuth-Scopes",
 ]
 
 

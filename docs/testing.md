@@ -12,7 +12,7 @@ make verify
 ```
 
 This formats Go code, runs the full Go test suite, builds the CLI, runs the
-protected-proxy smoke test, and checks helper scripts.
+protected-proxy smoke tests, and checks helper scripts.
 
 CI uses the non-mutating equivalent:
 
@@ -57,7 +57,53 @@ make dev-upstream UPSTREAM_PORT=4000
 make protect UPSTREAM=http://127.0.0.1:4000 PROTECT_PORT=7400
 ```
 
-## 3. Protocol Demo Smoke Test
+## 3. Agent Delegation Smoke Test
+
+Use this when validating the agent delegation path manually.
+
+Terminal 1:
+
+```bash
+make dev-upstream
+```
+
+Terminal 2:
+
+```bash
+make protect-agent
+```
+
+Terminal 3:
+
+```bash
+make agent-add
+TOKEN=$(make delegate-token)
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7200/hello?x=1
+```
+
+If the local profile has a non-default PIN, use:
+
+```bash
+TOKEN=$(make delegate-token PIN=654321)
+```
+
+Expected result:
+
+- Requests without `Authorization: Bearer <token>` return `401`.
+- Requests with a valid token reach the upstream app.
+- The upstream app shows `X-AnyAuth-Actor-Type: agent`.
+- The upstream app shows `X-AnyAuth-Agent-ID`, `X-AnyAuth-Delegation-ID`,
+  and `X-AnyAuth-Scopes`.
+- The upstream app still receives the delegated local user through
+  `X-AnyAuth-Sub`, `X-AnyAuth-Name`, and `X-AnyAuth-Email`.
+
+Automated smoke coverage:
+
+```bash
+make smoke-agent-protect
+```
+
+## 4. Protocol Demo Smoke Test
 
 Use this when changing OAuth/OIDC flow behavior.
 
@@ -77,7 +123,7 @@ Expected result:
 - Demo App B reuses the provider SSO session.
 - PIN verification is required if a PIN is configured.
 
-## 4. Local State Checks
+## 5. Local State Checks
 
 Show the local user:
 

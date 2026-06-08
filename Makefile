@@ -6,8 +6,11 @@ UPSTREAM_PORT ?= 3000
 UPSTREAM ?= http://127.0.0.1:$(UPSTREAM_PORT)
 DATA_DIR ?= .anyauth
 PIN ?= 123456
+AGENT_ID ?= codex
+AGENT_NAME ?= Codex Local Agent
+DELEGATION_SCOPE ?= app.read
 
-.PHONY: fmt fmt-check test build script-check smoke-protect verify ci run demo protect dev-upstream user-show set-pin clear-pin clean clean-state
+.PHONY: fmt fmt-check test build script-check smoke-protect smoke-agent-protect verify ci run demo protect protect-agent dev-upstream user-show set-pin clear-pin agent-add agents-list delegate-token delegate-list clean clean-state
 
 fmt:
 	gofmt -w cmd internal
@@ -27,9 +30,12 @@ script-check:
 smoke-protect:
 	go test ./internal/localdev -run TestProtectGatewayFlow -v
 
-verify: fmt test build smoke-protect script-check
+smoke-agent-protect:
+	go test ./internal/localdev -run TestProtectGatewayWithDelegation -v
 
-ci: fmt-check test build smoke-protect script-check
+verify: fmt test build smoke-protect smoke-agent-protect script-check
+
+ci: fmt-check test build smoke-protect smoke-agent-protect script-check
 
 run:
 	go run ./cmd/anyauth serve -provider-port $(PROVIDER_PORT) -data-dir $(DATA_DIR)
@@ -39,6 +45,9 @@ demo:
 
 protect:
 	go run ./cmd/anyauth protect -provider-port $(PROVIDER_PORT) -port $(PROTECT_PORT) -upstream $(UPSTREAM) -data-dir $(DATA_DIR)
+
+protect-agent:
+	go run ./cmd/anyauth protect -provider-port $(PROVIDER_PORT) -port $(PROTECT_PORT) -upstream $(UPSTREAM) -data-dir $(DATA_DIR) --require-delegation
 
 dev-upstream:
 	python3 scripts/dev_upstream.py --port $(UPSTREAM_PORT)
@@ -51,6 +60,18 @@ set-pin:
 
 clear-pin:
 	go run ./cmd/anyauth user clear-pin -data-dir $(DATA_DIR)
+
+agent-add:
+	go run ./cmd/anyauth agents add -data-dir $(DATA_DIR) --id $(AGENT_ID) --name "$(AGENT_NAME)"
+
+agents-list:
+	go run ./cmd/anyauth agents list -data-dir $(DATA_DIR)
+
+delegate-token:
+	@printf "%s\n" "$(PIN)" | go run ./cmd/anyauth delegate create -data-dir $(DATA_DIR) --agent $(AGENT_ID) --provider-port $(PROVIDER_PORT) --protect-port $(PROTECT_PORT) --scope $(DELEGATION_SCOPE) --format token --pin-stdin
+
+delegate-list:
+	go run ./cmd/anyauth delegate list -data-dir $(DATA_DIR)
 
 clean:
 	rm -rf bin __pycache__ scripts/__pycache__

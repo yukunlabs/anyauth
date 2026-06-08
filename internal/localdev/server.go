@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/yukunlabs/anyauth/internal/clientregistry"
+	"github.com/yukunlabs/anyauth/internal/delegation"
 	"github.com/yukunlabs/anyauth/internal/jose"
 	"github.com/yukunlabs/anyauth/internal/userstore"
 )
@@ -30,13 +31,14 @@ import (
 const keyID = "anyauth-local-dev-key"
 
 type Config struct {
-	ProviderPort    int
-	AppAPort        int
-	AppBPort        int
-	ProtectPort     int
-	DataDir         string
-	DemoApps        bool
-	ProtectUpstream string
+	ProviderPort      int
+	AppAPort          int
+	AppBPort          int
+	ProtectPort       int
+	DataDir           string
+	DemoApps          bool
+	ProtectUpstream   string
+	RequireDelegation bool
 }
 
 type app struct {
@@ -110,6 +112,18 @@ type protectSession struct {
 	CreatedAt time.Time
 }
 
+type protectIdentity struct {
+	ActorType    string
+	HumanSub     string
+	HumanName    string
+	HumanEmail   string
+	AgentID      string
+	AgentName    string
+	DelegationID string
+	TokenID      string
+	Scopes       []string
+}
+
 type store struct {
 	mu               sync.Mutex
 	providerSessions map[string]providerSession
@@ -153,6 +167,9 @@ func Run(cfg Config) error {
 	fmt.Printf("  Provider:   http://127.0.0.1:%d\n", cfg.ProviderPort)
 	if cfg.ProtectUpstream != "" {
 		fmt.Printf("  Protected:  http://127.0.0.1:%d -> %s\n", cfg.ProtectPort, cfg.ProtectUpstream)
+		if cfg.RequireDelegation {
+			fmt.Println("  Mode:       agent delegation required")
+		}
 	}
 	if cfg.DemoApps {
 		fmt.Printf("  Demo App A: http://127.0.0.1:%d\n", cfg.AppAPort)
@@ -688,14 +705,26 @@ func newProtectedApp(root *app, upstream *url.URL, port int) *protectedApp {
 		originalDirector(req)
 		req.Host = upstream.Host
 		stripAnyAuthHeaders(req.Header)
-		session, ok := req.Context().Value(protectSessionContextKey{}).(protectSession)
+		identity, ok := req.Context().Value(protectSessionContextKey{}).(protectIdentity)
 		if !ok {
 			return
 		}
+		if identity.ActorType == "agent" {
+			req.Header.Del("Authorization")
+		}
 		req.Header.Set("X-AnyAuth-Authenticated", "true")
-		setHeaderIfPresent(req.Header, "X-AnyAuth-Sub", claimString(session.Claims, "sub"))
-		setHeaderIfPresent(req.Header, "X-AnyAuth-Name", claimString(session.Claims, "name"))
-		setHeaderIfPresent(req.Header, "X-AnyAuth-Email", claimString(session.Claims, "email"))
+		setHeaderIfPresent(req.Header, "X-AnyAuth-Actor-Type", identity.ActorType)
+		setHeaderIfPresent(req.Header, "X-AnyAuth-Sub", identity.HumanSub)
+		setHeaderIfPresent(req.Header, "X-AnyAuth-Name", identity.HumanName)
+		setHeaderIfPresent(req.Header, "X-AnyAuth-Email", identity.HumanEmail)
+		setHeaderIfPresent(req.Header, "X-AnyAuth-Human-Sub", identity.HumanSub)
+		setHeaderIfPresent(req.Header, "X-AnyAuth-Human-Name", identity.HumanName)
+		setHeaderIfPresent(req.Header, "X-AnyAuth-Human-Email", identity.HumanEmail)
+		setHeaderIfPresent(req.Header, "X-AnyAuth-Agent-ID", identity.AgentID)
+		setHeaderIfPresent(req.Header, "X-AnyAuth-Agent-Name", identity.AgentName)
+		setHeaderIfPresent(req.Header, "X-AnyAuth-Delegation-ID", identity.DelegationID)
+		setHeaderIfPresent(req.Header, "X-AnyAuth-Token-ID", identity.TokenID)
+		setHeaderIfPresent(req.Header, "X-AnyAuth-Scopes", strings.Join(identity.Scopes, " "))
 	}
 	app.reverseProxy = proxy
 	return app
@@ -804,14 +833,87 @@ func (p *protectedApp) callback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *protectedApp) proxy(w http.ResponseWriter, r *http.Request) {
+	token, hasBearer, err := bearerToken(r)
+	if err != nil {
+		writeDelegationUnauthorized(w, err)
+		return
+	}
+	if hasBearer {
+		identity, err := p.delegatedIdentity(token)
+		if err != nil {
+			writeDelegationUnauthorized(w, err)
+			return
+		}
+		ctx := context.WithValue(r.Context(), protectSessionContextKey{}, identity)
+		p.reverseProxy.ServeHTTP(w, r.WithContext(ctx))
+		return
+	}
+	if p.root.cfg.RequireDelegation {
+		writeDelegationUnauthorized(w, fmt.Errorf("delegation bearer token is required"))
+		return
+	}
+
 	session, ok := p.currentSession(r)
 	if !ok {
 		returnPath := cleanReturnPath(r.URL.RequestURI())
 		http.Redirect(w, r, "/__anyauth/login?return="+url.QueryEscape(returnPath), http.StatusFound)
 		return
 	}
-	ctx := context.WithValue(r.Context(), protectSessionContextKey{}, session)
+	ctx := context.WithValue(r.Context(), protectSessionContextKey{}, identityFromSession(session))
 	p.reverseProxy.ServeHTTP(w, r.WithContext(ctx))
+}
+
+func (p *protectedApp) delegatedIdentity(token string) (protectIdentity, error) {
+	ctx, err := delegation.ValidateToken(token, delegation.ValidateOptions{
+		Issuer:    p.root.issuer,
+		Audience:  delegation.AudienceForProtectPort(p.port),
+		DataDir:   p.root.cfg.DataDir,
+		PublicKey: &p.root.signingKey.PublicKey,
+	})
+	if err != nil {
+		return protectIdentity{}, err
+	}
+	record := ctx.Delegation
+	return protectIdentity{
+		ActorType:    "agent",
+		HumanSub:     record.HumanSub,
+		HumanName:    record.HumanName,
+		HumanEmail:   record.HumanEmail,
+		AgentID:      record.AgentID,
+		AgentName:    record.AgentName,
+		DelegationID: record.ID,
+		TokenID:      record.TokenID,
+		Scopes:       ctx.Scopes,
+	}, nil
+}
+
+func identityFromSession(session protectSession) protectIdentity {
+	return protectIdentity{
+		ActorType:  "human",
+		HumanSub:   claimString(session.Claims, "sub"),
+		HumanName:  claimString(session.Claims, "name"),
+		HumanEmail: claimString(session.Claims, "email"),
+	}
+}
+
+func bearerToken(r *http.Request) (string, bool, error) {
+	auth := strings.TrimSpace(r.Header.Get("Authorization"))
+	if auth == "" {
+		return "", false, nil
+	}
+	parts := strings.Fields(auth)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || parts[1] == "" {
+		return "", false, fmt.Errorf("Authorization header must be Bearer <token>")
+	}
+	return parts[1], true, nil
+}
+
+func writeDelegationUnauthorized(w http.ResponseWriter, err error) {
+	w.Header().Set("WWW-Authenticate", `Bearer realm="anyauth", error="invalid_token"`)
+	writeJSON(w, http.StatusUnauthorized, map[string]any{
+		"error":             "invalid_token",
+		"error_description": err.Error(),
+	})
 }
 
 func (p *protectedApp) exchangeCode(code, verifier string) (tokenResponse, error) {
@@ -890,13 +992,10 @@ func cleanReturnPath(value string) string {
 }
 
 func stripAnyAuthHeaders(header http.Header) {
-	for _, name := range []string{
-		"X-AnyAuth-Authenticated",
-		"X-AnyAuth-Sub",
-		"X-AnyAuth-Name",
-		"X-AnyAuth-Email",
-	} {
-		header.Del(name)
+	for name := range header {
+		if strings.HasPrefix(strings.ToLower(name), "x-anyauth-") {
+			header.Del(name)
+		}
 	}
 }
 

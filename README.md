@@ -88,6 +88,54 @@ make dev-upstream UPSTREAM_PORT=4000
 make protect UPSTREAM=http://127.0.0.1:4000 PROTECT_PORT=7400
 ```
 
+## Authorize An Agent For A Local App
+
+AnyAuth can also protect an upstream app for agent traffic. A registered agent
+gets a short-lived delegation token, then calls the protected proxy with
+`Authorization: Bearer <token>`. The upstream app receives both the local human
+identity and the explicit agent/delegation identity.
+
+Terminal 1:
+
+```bash
+make dev-upstream
+```
+
+Terminal 2:
+
+```bash
+make protect-agent
+```
+
+Terminal 3:
+
+```bash
+make agent-add
+TOKEN=$(make delegate-token)
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7200/hello?x=1
+```
+
+If your local profile uses a custom PIN, pass it to the token target:
+
+```bash
+TOKEN=$(make delegate-token PIN=654321)
+```
+
+The upstream app should show headers such as:
+
+```text
+X-AnyAuth-Authenticated: true
+X-AnyAuth-Actor-Type: agent
+X-AnyAuth-Sub: local-user
+X-AnyAuth-Human-Sub: local-user
+X-AnyAuth-Agent-ID: codex
+X-AnyAuth-Delegation-ID: del_...
+X-AnyAuth-Scopes: app.read
+```
+
+Without a valid delegation token, `protect-agent` returns `401` instead of
+redirecting to the browser login flow.
+
 ## Run The Local Demo
 
 Start the provider and two demo apps:
@@ -174,10 +222,13 @@ The current prototype includes:
 - Local provider session
 - Optional local PIN verification
 - Persistent local client registry
+- Persistent local agent registry
+- Short-lived agent delegation tokens
 - Client and user management CLI commands
 - ID token signing with a locally generated RSA key
 - UserInfo endpoint
 - Protected reverse proxy mode with identity headers
+- Agent-aware protected proxy mode with delegation headers
 - Demo mode with two built-in clients
 
 See [docs/mvp-scope.md](docs/mvp-scope.md) and
@@ -211,10 +262,14 @@ make fmt
 make test
 make build
 make smoke-protect
+make smoke-agent-protect
 make run
 make demo
 make protect
+make protect-agent
 make dev-upstream
+make agent-add
+make delegate-token
 make clean
 make clean-state
 ```

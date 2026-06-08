@@ -10,10 +10,15 @@ be treated as production identity infrastructure.
 - The only user is the local operator.
 - Protected upstream apps are assumed to be local apps controlled by the user.
 - Client registry is stored as local JSON in the AnyAuth data directory.
+- Agent registry is stored as local JSON in the AnyAuth data directory.
+- Agent delegation records are stored as local JSON in the AnyAuth data
+  directory.
 - Local user profile is stored as local JSON in the AnyAuth data directory.
 - Sessions, codes, and tokens are in-memory.
 - When configured, the login screen requires a local PIN before creating the
   provider session.
+- Agent delegation tokens are short-lived Bearer JWTs minted by the local
+  operator.
 
 ## Current Protections
 
@@ -26,6 +31,16 @@ be treated as production identity infrastructure.
 - Protected proxy sessions validate issuer, audience, expiration, and nonce.
 - The protected proxy strips incoming `X-AnyAuth-*` identity headers before
   injecting the authenticated local identity.
+- The protected proxy can require agent delegation Bearer tokens instead of
+  browser SSO redirects.
+- Delegation tokens are signed with RS256 and validated for issuer, audience,
+  expiration, not-before, token type, token id, token hash, registered agent,
+  and revocation state.
+- Delegation tokens use an explicit actor claim plus AnyAuth-specific
+  delegation metadata, so upstream apps can distinguish human browser traffic
+  from agent traffic.
+- In agent delegation mode, the protected proxy removes the incoming
+  `Authorization` header before forwarding to the upstream app.
 - Access tokens must be presented as Bearer tokens for UserInfo.
 - PINs are stored as salted PBKDF2-SHA256 verifiers, not plaintext.
 - PIN verification is optional and can be disabled with `user clear-pin`.
@@ -39,6 +54,14 @@ be treated as production identity infrastructure.
 - No phishing-resistant local user verification.
 - No conformance test suite.
 - Client secrets are stored in local plaintext JSON.
+- Agent metadata and delegation records are stored in local plaintext JSON.
+- Delegation tokens are Bearer tokens. Anyone who obtains one can use it until
+  it expires or is revoked.
+- Delegation token creation is a local CLI action, not a full interactive
+  consent workflow.
+- Delegation scopes are advisory labels in the current prototype. Upstream apps
+  can read the injected scope header, but AnyAuth does not yet enforce
+  operation-level policies inside the upstream app.
 - Protected upstream apps can still be reached directly if they listen on an
   accessible port; the proxy only protects traffic that enters through AnyAuth.
 - Protected upstream apps must treat `X-AnyAuth-*` headers as trusted only when
