@@ -24,6 +24,9 @@ app-a.localhost -> AnyAuth -> login once -> app-a logged in
 app-b.localhost -> AnyAuth -> already logged in -> app-b logged in
 ```
 
+If a local PIN is configured, AnyAuth requires that PIN before creating the SSO
+session.
+
 ## Product Boundaries
 
 AnyAuth works for apps the user owns or controls. It does not make arbitrary

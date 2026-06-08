@@ -12,6 +12,7 @@ for apps owned by the same developer.
 - Demo App B on `127.0.0.1:7102`
 - Authorization Code flow with PKCE
 - One local user
+- Optional local PIN verification before provider session creation
 - Persistent local client registry
 - In-memory authorization codes, access tokens, and sessions
 - Discovery endpoint
@@ -20,11 +21,12 @@ for apps owned by the same developer.
 - RS256 ID token signing through a local RSA key
 - Single Go binary entrypoint through `cmd/anyauth`
 - `clients add` and `clients list` CLI commands
+- `user show` and `user set-pin` CLI commands
 
 ## Out Of Scope
 
 - Production persistence
-- Real password storage
+- Production-grade password or passkey storage
 - Passkeys / Touch ID
 - Refresh tokens
 - Client management UI

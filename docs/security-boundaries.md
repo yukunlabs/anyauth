@@ -8,8 +8,10 @@ be treated as production identity infrastructure.
 - The provider binds to `127.0.0.1`.
 - The only user is the local operator.
 - Client registry is stored as local JSON in the AnyAuth data directory.
+- Local user profile is stored as local JSON in the AnyAuth data directory.
 - Sessions, codes, and tokens are in-memory.
-- The login screen has no real password or biometric verification yet.
+- When configured, the login screen requires a local PIN before creating the
+  provider session.
 
 ## Current Protections
 
@@ -20,6 +22,7 @@ be treated as production identity infrastructure.
 - Demo clients verify RS256 ID token signatures.
 - Demo clients validate issuer, audience, expiration, and nonce.
 - Access tokens must be presented as Bearer tokens for UserInfo.
+- PINs are stored as salted PBKDF2-SHA256 verifiers, not plaintext.
 
 ## Known Gaps
 
@@ -30,12 +33,13 @@ be treated as production identity infrastructure.
 - No phishing-resistant local user verification.
 - No conformance test suite.
 - Client secrets are stored in local plaintext JSON.
+- A local PIN is weaker than passkeys or OS-backed biometric verification.
 - Demo claim validation handles only the simple v0 shape, not all OIDC edge
   cases such as array audiences, `azp`, or clock skew policy.
 
 ## Intended Next Security Milestones
 
-1. Add real local user verification with passkey or OS credential prompt.
+1. Add passkey or OS credential prompt verification.
 2. Replace local plaintext secrets and in-memory state with an encrypted store.
 3. Add structured protocol tests and negative cases.
 4. Add refresh token rotation.

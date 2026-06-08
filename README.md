@@ -75,6 +75,25 @@ JWKS URI: http://127.0.0.1:7100/jwks.json
 UserInfo endpoint: http://127.0.0.1:7100/userinfo
 ```
 
+## Configure Local PIN Verification
+
+AnyAuth can require a local PIN before it creates the provider SSO session.
+
+Show the local user profile:
+
+```bash
+go run ./cmd/anyauth user show
+```
+
+Set a PIN:
+
+```bash
+printf "123456\n" | go run ./cmd/anyauth user set-pin --pin-stdin
+```
+
+After a PIN is configured, the provider login page will require that PIN before
+redirecting back to the client app.
+
 ## Initial Scope
 
 The local demo includes:
@@ -83,6 +102,7 @@ The local demo includes:
 - JWKS endpoint
 - Authorization Code flow with PKCE
 - Local provider session
+- Optional local PIN verification
 - Persistent local client registry
 - ID token signing with a locally generated RSA key
 - UserInfo endpoint

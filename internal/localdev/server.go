@@ -23,6 +23,7 @@ import (
 
 	"github.com/yukunlabs/anyauth/internal/clientregistry"
 	"github.com/yukunlabs/anyauth/internal/jose"
+	"github.com/yukunlabs/anyauth/internal/userstore"
 )
 
 const keyID = "anyauth-local-dev-key"
@@ -41,6 +42,7 @@ type app struct {
 	store      *store
 	clients    map[string]client
 	user       user
+	profile    userstore.Profile
 }
 
 type client struct {
@@ -155,6 +157,10 @@ func Start(cfg Config) (*ServerSet, Config, error) {
 	if err != nil {
 		return nil, cfg, err
 	}
+	profile, err := userstore.Load(cfg.DataDir)
+	if err != nil {
+		return nil, cfg, err
+	}
 
 	a := &app{
 		cfg:        cfg,
@@ -162,10 +168,11 @@ func Start(cfg Config) (*ServerSet, Config, error) {
 		signingKey: key,
 		store:      newStore(),
 		user: user{
-			Sub:   "local-user",
-			Name:  "Local User",
-			Email: "local.user@anyauth.local",
+			Sub:   profile.Sub,
+			Name:  profile.Name,
+			Email: profile.Email,
 		},
+		profile: profile,
 	}
 	a.clients = map[string]client{
 		"demo-app-a": {
@@ -352,13 +359,23 @@ func (a *app) authorize(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	pinControl := ""
+	securityNote := `<p class="muted">No local PIN is configured. This development profile will continue without user verification.</p>`
+	buttonText := "Continue as " + html.EscapeString(a.user.Email)
+	if userstore.HasPIN(a.profile) {
+		pinControl = `<p><label>PIN<br><input name="pin" type="password" autocomplete="current-password" autofocus required></label></p>`
+		securityNote = `<p class="muted">Enter your local AnyAuth PIN to continue.</p>`
+		buttonText = "Unlock AnyAuth"
+	}
+
 	writeHTML(w, "Sign in with AnyAuth", fmt.Sprintf(`
 <h1>Sign in with AnyAuth</h1>
-<p class="muted">Prototype login uses a single local user. Future versions should use passkeys or OS verification.</p>
+%s
 <form method="post" action="/login">
   %s
-  <button type="submit">Continue as %s</button>
-</form>`, hidden.String(), html.EscapeString(a.user.Email)))
+  %s
+  <button type="submit">%s</button>
+</form>`, securityNote, hidden.String(), pinControl, buttonText))
 }
 
 func (a *app) login(w http.ResponseWriter, r *http.Request) {
@@ -373,6 +390,17 @@ func (a *app) login(w http.ResponseWriter, r *http.Request) {
 	if err := a.validateAuthorize(r.Form); err != "" {
 		writeHTML(w, "Login Error", "<h1>Login Error</h1><pre>"+html.EscapeString(err)+"</pre>")
 		return
+	}
+	if userstore.HasPIN(a.profile) {
+		ok, err := userstore.VerifyPIN(a.profile, r.Form.Get("pin"))
+		if err != nil {
+			writeHTMLStatus(w, http.StatusUnauthorized, "Login Error", "<h1>PIN verification failed</h1><pre>"+html.EscapeString(err.Error())+"</pre>")
+			return
+		}
+		if !ok {
+			writeHTMLStatus(w, http.StatusUnauthorized, "Login Error", "<h1>PIN verification failed</h1>")
+			return
+		}
 	}
 
 	sessionID, err := jose.RandomURLToken(32)
@@ -770,7 +798,12 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func writeHTML(w http.ResponseWriter, title string, body string) {
+	writeHTMLStatus(w, http.StatusOK, title, body)
+}
+
+func writeHTMLStatus(w http.ResponseWriter, status int, title string, body string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
 	_, _ = fmt.Fprintf(w, `<!doctype html>
 <html lang="en">
 <head>
