@@ -23,6 +23,7 @@ be treated as production identity infrastructure.
 - Demo clients validate issuer, audience, expiration, and nonce.
 - Access tokens must be presented as Bearer tokens for UserInfo.
 - PINs are stored as salted PBKDF2-SHA256 verifiers, not plaintext.
+- PIN verification is optional and can be disabled with `user clear-pin`.
 
 ## Known Gaps
 

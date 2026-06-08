@@ -124,6 +124,18 @@ func SetPIN(dataDir string, pin string) (Profile, error) {
 	return profile, nil
 }
 
+func ClearPIN(dataDir string) (Profile, error) {
+	profile, err := Load(dataDir)
+	if err != nil {
+		return Profile{}, err
+	}
+	profile.PINVerifier = nil
+	if err := Save(dataDir, profile); err != nil {
+		return Profile{}, err
+	}
+	return profile, nil
+}
+
 func ValidatePIN(pin string) error {
 	if len(pin) < 6 {
 		return fmt.Errorf("PIN must be at least 6 characters")

@@ -21,7 +21,7 @@ for apps owned by the same developer.
 - RS256 ID token signing through a local RSA key
 - Single Go binary entrypoint through `cmd/anyauth`
 - `clients add` and `clients list` CLI commands
-- `user show` and `user set-pin` CLI commands
+- `user show`, `user set-pin`, and `user clear-pin` CLI commands
 
 ## Out Of Scope
 

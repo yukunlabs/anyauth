@@ -159,6 +159,8 @@ func user(args []string) {
 		userShow(args[1:])
 	case "set-pin":
 		userSetPIN(args[1:])
+	case "clear-pin":
+		userClearPIN(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown user command: %s\n\n", args[0])
 		userUsage()
@@ -248,6 +250,22 @@ func userSetPIN(args []string) {
 	fmt.Printf("PIN configured for %s <%s>\n", profile.Name, profile.Email)
 }
 
+func userClearPIN(args []string) {
+	fs := flag.NewFlagSet("user clear-pin", flag.ExitOnError)
+	dataDir := fs.String("data-dir", ".anyauth", "local AnyAuth data directory")
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+
+	profile, err := userstore.ClearPIN(*dataDir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Printf("PIN cleared for %s <%s>\n", profile.Name, profile.Email)
+}
+
 type repeatString []string
 
 func (r *repeatString) String() string {
@@ -268,6 +286,7 @@ Usage:
   anyauth clients list [flags]
   anyauth user show [flags]
   anyauth user set-pin [flags]
+  anyauth user clear-pin [flags]
   anyauth version
 
 Examples:
@@ -276,6 +295,7 @@ Examples:
   go run ./cmd/anyauth clients add --id my-app --name "My App" --redirect-uri http://127.0.0.1:3000/callback
   go run ./cmd/anyauth clients list
   printf "123456\n" | go run ./cmd/anyauth user set-pin --pin-stdin
+  go run ./cmd/anyauth user clear-pin
 
 `)
 }
@@ -301,10 +321,12 @@ func userUsage() {
 Usage:
   anyauth user show [flags]
   anyauth user set-pin [flags]
+  anyauth user clear-pin [flags]
 
 Examples:
   anyauth user show
   printf "123456\n" | anyauth user set-pin --pin-stdin
+  anyauth user clear-pin
 
 `)
 }

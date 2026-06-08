@@ -94,6 +94,12 @@ printf "123456\n" | go run ./cmd/anyauth user set-pin --pin-stdin
 After a PIN is configured, the provider login page will require that PIN before
 redirecting back to the client app.
 
+Clear the PIN and return to the no-PIN development login:
+
+```bash
+go run ./cmd/anyauth user clear-pin
+```
+
 ## Initial Scope
 
 The local demo includes:
@@ -104,6 +110,7 @@ The local demo includes:
 - Local provider session
 - Optional local PIN verification
 - Persistent local client registry
+- Client and user management CLI commands
 - ID token signing with a locally generated RSA key
 - UserInfo endpoint
 - Two demo clients

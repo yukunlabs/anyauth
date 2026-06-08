@@ -45,6 +45,36 @@ func TestSetAndVerifyPIN(t *testing.T) {
 	}
 }
 
+func TestClearPIN(t *testing.T) {
+	dataDir := t.TempDir()
+	if _, err := SetPIN(dataDir, "123456"); err != nil {
+		t.Fatal(err)
+	}
+
+	profile, err := ClearPIN(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if HasPIN(profile) {
+		t.Fatal("profile should not have PIN configured")
+	}
+
+	loaded, err := Load(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if HasPIN(loaded) {
+		t.Fatal("loaded profile should not have PIN configured")
+	}
+	ok, err := VerifyPIN(loaded, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("verification should pass when no PIN is configured")
+	}
+}
+
 func TestSetPINRejectsShortPIN(t *testing.T) {
 	_, err := SetPIN(t.TempDir(), "12345")
 	if err == nil {
