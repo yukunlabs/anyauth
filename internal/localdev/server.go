@@ -33,6 +33,7 @@ type Config struct {
 	AppAPort     int
 	AppBPort     int
 	DataDir      string
+	DemoApps     bool
 }
 
 type app struct {
@@ -123,10 +124,16 @@ func Run(cfg Config) error {
 		return err
 	}
 
-	fmt.Println("AnyAuth local demo is running.")
+	if cfg.DemoApps {
+		fmt.Println("AnyAuth local demo is running.")
+	} else {
+		fmt.Println("AnyAuth local provider is running.")
+	}
 	fmt.Printf("  Provider:   http://127.0.0.1:%d\n", cfg.ProviderPort)
-	fmt.Printf("  Demo App A: http://127.0.0.1:%d\n", cfg.AppAPort)
-	fmt.Printf("  Demo App B: http://127.0.0.1:%d\n", cfg.AppBPort)
+	if cfg.DemoApps {
+		fmt.Printf("  Demo App A: http://127.0.0.1:%d\n", cfg.AppAPort)
+		fmt.Printf("  Demo App B: http://127.0.0.1:%d\n", cfg.AppBPort)
+	}
 	fmt.Println("Press Ctrl+C to stop.")
 
 	stop := make(chan os.Signal, 1)
@@ -142,11 +149,13 @@ func Start(cfg Config) (*ServerSet, Config, error) {
 	if cfg.ProviderPort == 0 {
 		cfg.ProviderPort = 7100
 	}
-	if cfg.AppAPort == 0 {
-		cfg.AppAPort = 7101
-	}
-	if cfg.AppBPort == 0 {
-		cfg.AppBPort = 7102
+	if cfg.DemoApps {
+		if cfg.AppAPort == 0 {
+			cfg.AppAPort = 7101
+		}
+		if cfg.AppBPort == 0 {
+			cfg.AppBPort = 7102
+		}
 	}
 	if cfg.DataDir == "" {
 		cfg.DataDir = ".anyauth"
@@ -174,23 +183,24 @@ func Start(cfg Config) (*ServerSet, Config, error) {
 		},
 		profile: profile,
 	}
-	a.clients = map[string]client{
-		"demo-app-a": {
+	a.clients = map[string]client{}
+	if cfg.DemoApps {
+		a.clients["demo-app-a"] = client{
 			ID:     "demo-app-a",
 			Name:   "Demo App A",
 			Secret: "demo-app-a-secret",
 			RedirectURIs: map[string]bool{
 				fmt.Sprintf("http://127.0.0.1:%d/callback", cfg.AppAPort): true,
 			},
-		},
-		"demo-app-b": {
+		}
+		a.clients["demo-app-b"] = client{
 			ID:     "demo-app-b",
 			Name:   "Demo App B",
 			Secret: "demo-app-b-secret",
 			RedirectURIs: map[string]bool{
 				fmt.Sprintf("http://127.0.0.1:%d/callback", cfg.AppBPort): true,
 			},
-		},
+		}
 	}
 	registeredClients, err := clientregistry.Load(cfg.DataDir)
 	if err != nil {
@@ -211,8 +221,12 @@ func Start(cfg Config) (*ServerSet, Config, error) {
 
 	servers := []*http.Server{
 		{Addr: fmt.Sprintf("127.0.0.1:%d", cfg.ProviderPort), Handler: a.providerMux()},
-		{Addr: fmt.Sprintf("127.0.0.1:%d", cfg.AppAPort), Handler: a.demoMux("Demo App A", "demo-app-a", "demo-app-a-secret", cfg.AppAPort, "demo_app_a_session")},
-		{Addr: fmt.Sprintf("127.0.0.1:%d", cfg.AppBPort), Handler: a.demoMux("Demo App B", "demo-app-b", "demo-app-b-secret", cfg.AppBPort, "demo_app_b_session")},
+	}
+	if cfg.DemoApps {
+		servers = append(servers,
+			&http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", cfg.AppAPort), Handler: a.demoMux("Demo App A", "demo-app-a", "demo-app-a-secret", cfg.AppAPort, "demo_app_a_session")},
+			&http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", cfg.AppBPort), Handler: a.demoMux("Demo App B", "demo-app-b", "demo-app-b-secret", cfg.AppBPort, "demo_app_b_session")},
+		)
 	}
 
 	for _, srv := range servers {
@@ -278,11 +292,19 @@ func (a *app) providerHome(w http.ResponseWriter, r *http.Request) {
 <ul>
   <li><a href="/.well-known/openid-configuration">Discovery metadata</a></li>
   <li><a href="/jwks.json">JWKS</a></li>
-  <li><a href="http://127.0.0.1:%d">Demo App A</a></li>
-  <li><a href="http://127.0.0.1:%d">Demo App B</a></li>
+  %s
 </ul>
 <h2>Registered clients</h2>
-%s`, a.cfg.AppAPort, a.cfg.AppBPort, a.clientsHTML()))
+%s`, a.demoLinksHTML(), a.clientsHTML()))
+}
+
+func (a *app) demoLinksHTML() string {
+	if !a.cfg.DemoApps {
+		return ""
+	}
+	return fmt.Sprintf(`
+  <li><a href="http://127.0.0.1:%d">Demo App A</a></li>
+  <li><a href="http://127.0.0.1:%d">Demo App B</a></li>`, a.cfg.AppAPort, a.cfg.AppBPort)
 }
 
 func (a *app) clientsHTML() string {

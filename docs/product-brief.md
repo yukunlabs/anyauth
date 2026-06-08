@@ -27,6 +27,13 @@ app-b.localhost -> AnyAuth -> already logged in -> app-b logged in
 If a local PIN is configured, AnyAuth requires that PIN before creating the SSO
 session.
 
+## Operating Modes
+
+- `serve` starts only the local provider and is the default path for real apps
+  the user owns.
+- `demo` starts the provider plus two built-in demo apps for validating SSO
+  behavior without creating a separate test application.
+
 ## Product Boundaries
 
 AnyAuth works for apps the user owns or controls. It does not make arbitrary

@@ -2,14 +2,15 @@
 
 ## Goal
 
-Build a runnable local SSO demo that proves AnyAuth can act as an identity hub
-for apps owned by the same developer.
+Build a runnable local provider that proves AnyAuth can act as an identity hub
+for apps owned by the same developer, with a built-in demo mode for local SSO
+validation.
 
 ## In Scope
 
-- Local OIDC-style provider on `127.0.0.1:7100`
-- Demo App A on `127.0.0.1:7101`
-- Demo App B on `127.0.0.1:7102`
+- Provider-first `serve` mode on `127.0.0.1:7100`
+- Demo mode with Demo App A on `127.0.0.1:7101`
+- Demo mode with Demo App B on `127.0.0.1:7102`
 - Authorization Code flow with PKCE
 - One local user
 - Optional local PIN verification before provider session creation
@@ -20,6 +21,7 @@ for apps owned by the same developer.
 - UserInfo endpoint
 - RS256 ID token signing through a local RSA key
 - Single Go binary entrypoint through `cmd/anyauth`
+- `serve` and `demo` CLI commands
 - `clients add` and `clients list` CLI commands
 - `user show`, `user set-pin`, and `user clear-pin` CLI commands
 
@@ -38,8 +40,8 @@ for apps owned by the same developer.
 
 ## Success Criteria
 
-- A user can log in to Demo App A through AnyAuth.
-- Opening Demo App B reuses the AnyAuth provider session.
+- In demo mode, a user can log in to Demo App A through AnyAuth.
+- In demo mode, opening Demo App B reuses the AnyAuth provider session.
 - The provider exposes standard-looking OIDC metadata and JWKS.
 - The repo explains the security boundary clearly.
 - The first implementation has no third-party Go dependencies.

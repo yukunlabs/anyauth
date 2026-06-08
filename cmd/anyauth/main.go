@@ -22,6 +22,8 @@ func main() {
 	switch os.Args[1] {
 	case "serve":
 		serve(os.Args[2:])
+	case "demo":
+		demo(os.Args[2:])
 	case "clients":
 		clients(os.Args[2:])
 	case "user":
@@ -40,6 +42,25 @@ func main() {
 func serve(args []string) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	providerPort := fs.Int("provider-port", 7100, "local AnyAuth provider port")
+	dataDir := fs.String("data-dir", ".anyauth", "local AnyAuth data directory")
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+
+	cfg := localdev.Config{
+		ProviderPort: *providerPort,
+		DataDir:      *dataDir,
+	}
+	if err := localdev.Run(cfg); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func demo(args []string) {
+	fs := flag.NewFlagSet("demo", flag.ExitOnError)
+	providerPort := fs.Int("provider-port", 7100, "local AnyAuth provider port")
 	appAPort := fs.Int("app-a-port", 7101, "demo app A port")
 	appBPort := fs.Int("app-b-port", 7102, "demo app B port")
 	dataDir := fs.String("data-dir", ".anyauth", "local AnyAuth data directory")
@@ -53,6 +74,7 @@ func serve(args []string) {
 		AppAPort:     *appAPort,
 		AppBPort:     *appBPort,
 		DataDir:      *dataDir,
+		DemoApps:     true,
 	}
 	if err := localdev.Run(cfg); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -282,6 +304,7 @@ func usage() {
 
 Usage:
   anyauth serve [flags]
+  anyauth demo [flags]
   anyauth clients add --id <id> --redirect-uri <uri> [flags]
   anyauth clients list [flags]
   anyauth user show [flags]
@@ -291,6 +314,7 @@ Usage:
 
 Examples:
   go run ./cmd/anyauth serve
+  go run ./cmd/anyauth demo
   go run ./cmd/anyauth serve -provider-port 7700
   go run ./cmd/anyauth clients add --id my-app --name "My App" --redirect-uri http://127.0.0.1:3000/callback
   go run ./cmd/anyauth clients list

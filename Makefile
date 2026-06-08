@@ -1,4 +1,4 @@
-.PHONY: fmt test build run
+.PHONY: fmt test build run demo
 
 fmt:
 	gofmt -w cmd internal
@@ -11,3 +11,6 @@ build:
 
 run:
 	go run ./cmd/anyauth serve
+
+demo:
+	go run ./cmd/anyauth demo

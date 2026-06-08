@@ -5,7 +5,7 @@ AnyAuth is a local-first authentication hub for developers and solo builders.
 Repository: https://github.com/yukunlabs/anyauth
 
 The first milestone is intentionally small: run a local OpenID Connect-style
-provider and two demo apps to prove local SSO across apps you own.
+provider, register apps you own, and use built-in demo apps to prove local SSO.
 
 ## What This Is
 
@@ -20,16 +20,31 @@ provider and two demo apps to prove local SSO across apps you own.
 - It cannot log you into arbitrary third-party websites.
 - The current prototype is not production-grade security software.
 
-## Run The Local Demo
+## Run The Local Provider
 
 Requirements:
 
 - Go 1.22+
 
-Start the provider and two demo apps:
+Start the provider:
 
 ```bash
 go run ./cmd/anyauth serve
+```
+
+Open:
+
+- Provider: http://127.0.0.1:7100
+
+`serve` is provider-first: it does not start the built-in demo apps. Use this
+mode when connecting AnyAuth to apps you own.
+
+## Run The Local Demo
+
+Start the provider and two demo apps:
+
+```bash
+go run ./cmd/anyauth demo
 ```
 
 Open:
@@ -102,7 +117,7 @@ go run ./cmd/anyauth user clear-pin
 
 ## Initial Scope
 
-The local demo includes:
+The current prototype includes:
 
 - OIDC discovery metadata
 - JWKS endpoint
@@ -113,7 +128,7 @@ The local demo includes:
 - Client and user management CLI commands
 - ID token signing with a locally generated RSA key
 - UserInfo endpoint
-- Two demo clients
+- Demo mode with two built-in clients
 
 See [docs/mvp-scope.md](docs/mvp-scope.md) and
 [docs/security-boundaries.md](docs/security-boundaries.md).
@@ -136,6 +151,7 @@ See [docs/stack-decision.md](docs/stack-decision.md).
 ```bash
 go test ./...
 go run ./cmd/anyauth serve
+go run ./cmd/anyauth demo
 ```
 
 Or use `make`:
@@ -145,6 +161,7 @@ make fmt
 make test
 make build
 make run
+make demo
 ```
 
 Build a local binary:

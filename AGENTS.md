@@ -43,6 +43,8 @@ For protocol or UI-flow changes, also run a focused smoke test for the affected
 path. Examples:
 
 ```bash
+go run ./cmd/anyauth serve
+go run ./cmd/anyauth demo
 go run ./cmd/anyauth user show
 printf "123456\n" | go run ./cmd/anyauth user set-pin --pin-stdin
 go run ./cmd/anyauth user clear-pin

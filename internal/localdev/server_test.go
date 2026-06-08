@@ -22,6 +22,7 @@ func TestLocalSSOFlow(t *testing.T) {
 		AppAPort:     freePort(t),
 		AppBPort:     freePort(t),
 		DataDir:      t.TempDir(),
+		DemoApps:     true,
 	}
 	_, err := clientregistry.Add(cfg.DataDir, clientregistry.Client{
 		ID:           "custom-app",
@@ -125,6 +126,7 @@ func TestLocalSSOFlowWithPIN(t *testing.T) {
 		AppAPort:     freePort(t),
 		AppBPort:     freePort(t),
 		DataDir:      t.TempDir(),
+		DemoApps:     true,
 	}
 	if _, err := userstore.SetPIN(cfg.DataDir, "123456"); err != nil {
 		t.Fatal(err)
@@ -184,6 +186,83 @@ func TestLocalSSOFlowWithPIN(t *testing.T) {
 	body = mustGetBody(t, client, appA+"/", http.StatusOK)
 	if !strings.Contains(body, "Logged in through AnyAuth") {
 		t.Fatalf("App A did not show logged in user: %s", body)
+	}
+}
+
+func TestProviderOnlyMode(t *testing.T) {
+	cfg := Config{
+		ProviderPort: freePort(t),
+		DataDir:      t.TempDir(),
+	}
+	_, err := clientregistry.Add(cfg.DataDir, clientregistry.Client{
+		ID:           "custom-app",
+		Name:         "Custom App",
+		Secret:       "custom-secret",
+		RedirectURIs: []string{"http://127.0.0.1:18080/callback"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	servers, cfg, err := Start(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := servers.Shutdown(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	if len(servers.servers) != 1 {
+		t.Fatalf("server count = %d, want provider only", len(servers.servers))
+	}
+
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	provider := "http://127.0.0.1:" + itoa(cfg.ProviderPort)
+
+	body := mustGetBody(t, client, provider+"/", http.StatusOK)
+	if strings.Contains(body, "Demo App A") || strings.Contains(body, "demo-app-a") {
+		t.Fatalf("provider-only home leaked demo app links or clients: %s", body)
+	}
+	body = mustGetBody(t, client, provider+"/.well-known/openid-configuration", http.StatusOK)
+	if !strings.Contains(body, `"issuer":"`+provider+`"`) {
+		t.Fatalf("discovery issuer missing from %s", body)
+	}
+
+	customAuthorize := provider + "/authorize?" + url.Values{
+		"response_type":         []string{"code"},
+		"client_id":             []string{"custom-app"},
+		"redirect_uri":          []string{"http://127.0.0.1:18080/callback"},
+		"scope":                 []string{"openid profile email"},
+		"state":                 []string{"custom-state"},
+		"nonce":                 []string{"custom-nonce"},
+		"code_challenge":        []string{"custom-challenge"},
+		"code_challenge_method": []string{"S256"},
+	}.Encode()
+	body = mustGetBody(t, client, customAuthorize, http.StatusOK)
+	if !strings.Contains(body, "Sign in with AnyAuth") {
+		t.Fatalf("expected registered client to reach login page, got %s", body)
+	}
+
+	demoAuthorize := provider + "/authorize?" + url.Values{
+		"response_type":         []string{"code"},
+		"client_id":             []string{"demo-app-a"},
+		"redirect_uri":          []string{"http://127.0.0.1:7101/callback"},
+		"scope":                 []string{"openid profile email"},
+		"state":                 []string{"demo-state"},
+		"nonce":                 []string{"demo-nonce"},
+		"code_challenge":        []string{"demo-challenge"},
+		"code_challenge_method": []string{"S256"},
+	}.Encode()
+	body = mustGetBody(t, client, demoAuthorize, http.StatusOK)
+	if !strings.Contains(body, "unknown client_id") {
+		t.Fatalf("expected built-in demo client to be absent, got %s", body)
 	}
 }
 
