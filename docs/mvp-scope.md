@@ -3,14 +3,15 @@
 ## Goal
 
 Build a runnable local provider that proves AnyAuth can act as an identity hub
-for apps owned by the same developer, with a built-in demo mode for local SSO
-validation.
+for apps owned by the same developer, a protected proxy mode for local apps, and
+a built-in demo mode for local SSO validation.
 
 ## In Scope
 
 - Provider-first `serve` mode on `127.0.0.1:7100`
 - Demo mode with Demo App A on `127.0.0.1:7101`
 - Demo mode with Demo App B on `127.0.0.1:7102`
+- Protected proxy mode on `127.0.0.1:7200`
 - Authorization Code flow with PKCE
 - One local user
 - Optional local PIN verification before provider session creation
@@ -20,8 +21,10 @@ validation.
 - JWKS endpoint
 - UserInfo endpoint
 - RS256 ID token signing through a local RSA key
+- Reverse proxy to one local upstream app
+- Identity headers for authenticated upstream requests
 - Single Go binary entrypoint through `cmd/anyauth`
-- `serve` and `demo` CLI commands
+- `serve`, `protect`, and `demo` CLI commands
 - `clients add` and `clients list` CLI commands
 - `user show`, `user set-pin`, and `user clear-pin` CLI commands
 
@@ -42,6 +45,8 @@ validation.
 
 - In demo mode, a user can log in to Demo App A through AnyAuth.
 - In demo mode, opening Demo App B reuses the AnyAuth provider session.
+- In protect mode, an unauthenticated request is redirected to AnyAuth and then
+  proxied to the upstream app with identity headers.
 - The provider exposes standard-looking OIDC metadata and JWKS.
 - The repo explains the security boundary clearly.
 - The first implementation has no third-party Go dependencies.

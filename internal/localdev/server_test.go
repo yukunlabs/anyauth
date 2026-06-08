@@ -2,10 +2,12 @@ package localdev
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"strings"
@@ -263,6 +265,130 @@ func TestProviderOnlyMode(t *testing.T) {
 	body = mustGetBody(t, client, demoAuthorize, http.StatusOK)
 	if !strings.Contains(body, "unknown client_id") {
 		t.Fatalf("expected built-in demo client to be absent, got %s", body)
+	}
+}
+
+func TestProtectGatewayFlow(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "path=%s authenticated=%s sub=%s name=%s email=%s",
+			r.URL.String(),
+			r.Header.Get("X-AnyAuth-Authenticated"),
+			r.Header.Get("X-AnyAuth-Sub"),
+			r.Header.Get("X-AnyAuth-Name"),
+			r.Header.Get("X-AnyAuth-Email"),
+		)
+	}))
+	defer upstream.Close()
+
+	cfg := Config{
+		ProviderPort:    freePort(t),
+		ProtectPort:     freePort(t),
+		ProtectUpstream: upstream.URL,
+		DataDir:         t.TempDir(),
+	}
+	servers, cfg, err := Start(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := servers.Shutdown(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	if len(servers.servers) != 2 {
+		t.Fatalf("server count = %d, want provider and protected proxy", len(servers.servers))
+	}
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{
+		Jar: jar,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	provider := "http://127.0.0.1:" + itoa(cfg.ProviderPort)
+	gateway := "http://127.0.0.1:" + itoa(cfg.ProtectPort)
+
+	loginURL := mustGetLocation(t, client, gateway+"/private?x=1")
+	if !strings.HasPrefix(loginURL, "/__anyauth/login?return=") {
+		t.Fatalf("login redirect = %s", loginURL)
+	}
+	authorizeURL := mustGetLocation(t, client, gateway+loginURL)
+	if !strings.HasPrefix(authorizeURL, provider+"/authorize?") {
+		t.Fatalf("authorize redirect = %s", authorizeURL)
+	}
+	body := mustGetBody(t, client, authorizeURL, http.StatusOK)
+	if !strings.Contains(body, "Sign in with AnyAuth") {
+		t.Fatalf("expected provider login page, got %s", body)
+	}
+
+	parsedAuthorize, err := url.Parse(authorizeURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	callbackURL := mustPostLocation(t, client, provider+"/login", parsedAuthorize.Query())
+	if !strings.HasPrefix(callbackURL, gateway+"/__anyauth/callback?") {
+		t.Fatalf("callback redirect = %s", callbackURL)
+	}
+	returnURL := mustGetLocation(t, client, callbackURL)
+	if returnURL != "/private?x=1" {
+		t.Fatalf("return redirect = %s, want /private?x=1", returnURL)
+	}
+
+	req, err := http.NewRequest(http.MethodGet, gateway+"/private?x=1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("X-AnyAuth-Email", "spoofed@example.com")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("protected request status = %d, want 200, body: %s", resp.StatusCode, string(raw))
+	}
+	body = string(raw)
+	for _, want := range []string{
+		"path=/private?x=1",
+		"authenticated=true",
+		"sub=local-user",
+		"name=Local User",
+		"email=local.user@anyauth.local",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("protected upstream body missing %q from %s", want, body)
+		}
+	}
+	if strings.Contains(body, "spoofed@example.com") {
+		t.Fatalf("protected proxy forwarded spoofed identity header: %s", body)
+	}
+}
+
+func TestProtectRejectsInvalidUpstream(t *testing.T) {
+	cfg := Config{
+		ProviderPort:    freePort(t),
+		ProtectPort:     freePort(t),
+		ProtectUpstream: "127.0.0.1:3000",
+		DataDir:         t.TempDir(),
+	}
+	servers, _, err := Start(cfg)
+	if err == nil {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = servers.Shutdown(ctx)
+		}()
+		t.Fatal("expected invalid protect upstream to fail")
 	}
 }
 

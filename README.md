@@ -5,7 +5,8 @@ AnyAuth is a local-first authentication hub for developers and solo builders.
 Repository: https://github.com/yukunlabs/anyauth
 
 The first milestone is intentionally small: run a local OpenID Connect-style
-provider, register apps you own, and use built-in demo apps to prove local SSO.
+provider, protect apps you own behind a local SSO gateway, and use built-in demo
+apps to validate the flow.
 
 ## What This Is
 
@@ -38,6 +39,32 @@ Open:
 
 `serve` is provider-first: it does not start the built-in demo apps. Use this
 mode when connecting AnyAuth to apps you own.
+
+## Protect A Local App
+
+Start any local web app, then put AnyAuth in front of it:
+
+```bash
+go run ./cmd/anyauth protect --upstream http://127.0.0.1:3000
+```
+
+Open:
+
+- Protected app: http://127.0.0.1:7200
+- Provider: http://127.0.0.1:7100
+
+The protected proxy signs you in through AnyAuth before forwarding traffic to
+the upstream app. Authenticated upstream requests receive:
+
+```text
+X-AnyAuth-Authenticated: true
+X-AnyAuth-Sub: local-user
+X-AnyAuth-Name: Local User
+X-AnyAuth-Email: local.user@anyauth.local
+```
+
+Use this when you want to put SSO in front of a local app without wiring OIDC
+into that app yet.
 
 ## Run The Local Demo
 
@@ -128,6 +155,7 @@ The current prototype includes:
 - Client and user management CLI commands
 - ID token signing with a locally generated RSA key
 - UserInfo endpoint
+- Protected reverse proxy mode with identity headers
 - Demo mode with two built-in clients
 
 See [docs/mvp-scope.md](docs/mvp-scope.md) and
@@ -152,6 +180,7 @@ See [docs/stack-decision.md](docs/stack-decision.md).
 go test ./...
 go run ./cmd/anyauth serve
 go run ./cmd/anyauth demo
+go run ./cmd/anyauth protect --upstream http://127.0.0.1:3000
 ```
 
 Or use `make`:

@@ -24,6 +24,8 @@ func main() {
 		serve(os.Args[2:])
 	case "demo":
 		demo(os.Args[2:])
+	case "protect":
+		protect(os.Args[2:])
 	case "clients":
 		clients(os.Args[2:])
 	case "user":
@@ -75,6 +77,33 @@ func demo(args []string) {
 		AppBPort:     *appBPort,
 		DataDir:      *dataDir,
 		DemoApps:     true,
+	}
+	if err := localdev.Run(cfg); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func protect(args []string) {
+	fs := flag.NewFlagSet("protect", flag.ExitOnError)
+	providerPort := fs.Int("provider-port", 7100, "local AnyAuth provider port")
+	protectPort := fs.Int("port", 7200, "protected proxy port")
+	upstream := fs.String("upstream", "", "upstream app URL, for example http://127.0.0.1:3000")
+	dataDir := fs.String("data-dir", ".anyauth", "local AnyAuth data directory")
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	if *upstream == "" {
+		fmt.Fprintln(os.Stderr, "--upstream is required")
+		os.Exit(2)
+	}
+
+	cfg := localdev.Config{
+		ProviderPort:    *providerPort,
+		ProtectPort:     *protectPort,
+		ProtectUpstream: *upstream,
+		DataDir:         *dataDir,
 	}
 	if err := localdev.Run(cfg); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -305,6 +334,7 @@ func usage() {
 Usage:
   anyauth serve [flags]
   anyauth demo [flags]
+  anyauth protect --upstream <url> [flags]
   anyauth clients add --id <id> --redirect-uri <uri> [flags]
   anyauth clients list [flags]
   anyauth user show [flags]
@@ -315,6 +345,7 @@ Usage:
 Examples:
   go run ./cmd/anyauth serve
   go run ./cmd/anyauth demo
+  go run ./cmd/anyauth protect --upstream http://127.0.0.1:3000
   go run ./cmd/anyauth serve -provider-port 7700
   go run ./cmd/anyauth clients add --id my-app --name "My App" --redirect-uri http://127.0.0.1:3000/callback
   go run ./cmd/anyauth clients list

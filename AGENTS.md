@@ -45,6 +45,7 @@ path. Examples:
 ```bash
 go run ./cmd/anyauth serve
 go run ./cmd/anyauth demo
+go run ./cmd/anyauth protect --upstream http://127.0.0.1:3000
 go run ./cmd/anyauth user show
 printf "123456\n" | go run ./cmd/anyauth user set-pin --pin-stdin
 go run ./cmd/anyauth user clear-pin

@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/signal"
@@ -29,11 +30,13 @@ import (
 const keyID = "anyauth-local-dev-key"
 
 type Config struct {
-	ProviderPort int
-	AppAPort     int
-	AppBPort     int
-	DataDir      string
-	DemoApps     bool
+	ProviderPort    int
+	AppAPort        int
+	AppBPort        int
+	ProtectPort     int
+	DataDir         string
+	DemoApps        bool
+	ProtectUpstream string
 }
 
 type app struct {
@@ -95,6 +98,18 @@ type demoSession struct {
 	CreatedAt   time.Time
 }
 
+type protectState struct {
+	Nonce      string
+	Verifier   string
+	ReturnPath string
+	Created    time.Time
+}
+
+type protectSession struct {
+	Claims    map[string]any
+	CreatedAt time.Time
+}
+
 type store struct {
 	mu               sync.Mutex
 	providerSessions map[string]providerSession
@@ -102,6 +117,8 @@ type store struct {
 	accessTokens     map[string]accessToken
 	demoStates       map[string]demoState
 	demoSessions     map[string]demoSession
+	protectStates    map[string]protectState
+	protectSessions  map[string]protectSession
 }
 
 type ServerSet struct {
@@ -115,6 +132,8 @@ func newStore() *store {
 		accessTokens:     map[string]accessToken{},
 		demoStates:       map[string]demoState{},
 		demoSessions:     map[string]demoSession{},
+		protectStates:    map[string]protectState{},
+		protectSessions:  map[string]protectSession{},
 	}
 }
 
@@ -124,12 +143,17 @@ func Run(cfg Config) error {
 		return err
 	}
 
-	if cfg.DemoApps {
+	if cfg.ProtectUpstream != "" {
+		fmt.Println("AnyAuth protected proxy is running.")
+	} else if cfg.DemoApps {
 		fmt.Println("AnyAuth local demo is running.")
 	} else {
 		fmt.Println("AnyAuth local provider is running.")
 	}
 	fmt.Printf("  Provider:   http://127.0.0.1:%d\n", cfg.ProviderPort)
+	if cfg.ProtectUpstream != "" {
+		fmt.Printf("  Protected:  http://127.0.0.1:%d -> %s\n", cfg.ProtectPort, cfg.ProtectUpstream)
+	}
 	if cfg.DemoApps {
 		fmt.Printf("  Demo App A: http://127.0.0.1:%d\n", cfg.AppAPort)
 		fmt.Printf("  Demo App B: http://127.0.0.1:%d\n", cfg.AppBPort)
@@ -149,6 +173,9 @@ func Start(cfg Config) (*ServerSet, Config, error) {
 	if cfg.ProviderPort == 0 {
 		cfg.ProviderPort = 7100
 	}
+	if cfg.ProtectUpstream != "" && cfg.ProtectPort == 0 {
+		cfg.ProtectPort = 7200
+	}
 	if cfg.DemoApps {
 		if cfg.AppAPort == 0 {
 			cfg.AppAPort = 7101
@@ -159,6 +186,17 @@ func Start(cfg Config) (*ServerSet, Config, error) {
 	}
 	if cfg.DataDir == "" {
 		cfg.DataDir = ".anyauth"
+	}
+	var protectUpstream *url.URL
+	if cfg.ProtectUpstream != "" {
+		parsed, err := url.Parse(cfg.ProtectUpstream)
+		if err != nil {
+			return nil, cfg, err
+		}
+		if parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return nil, cfg, fmt.Errorf("protect upstream must be an absolute http or https URL")
+		}
+		protectUpstream = parsed
 	}
 
 	keyPath := filepath.Join(cfg.DataDir, "dev-private-key.pem")
@@ -218,9 +256,24 @@ func Start(cfg Config) (*ServerSet, Config, error) {
 			RedirectURIs: redirectURIs,
 		}
 	}
+	if protectUpstream != nil {
+		a.clients[protectClientID(cfg.ProtectPort)] = client{
+			ID:     protectClientID(cfg.ProtectPort),
+			Name:   "AnyAuth Protected Proxy",
+			Secret: protectClientSecret(cfg.ProtectPort),
+			RedirectURIs: map[string]bool{
+				protectRedirectURI(cfg.ProtectPort): true,
+			},
+		}
+	}
 
 	servers := []*http.Server{
 		{Addr: fmt.Sprintf("127.0.0.1:%d", cfg.ProviderPort), Handler: a.providerMux()},
+	}
+	if protectUpstream != nil {
+		servers = append(servers,
+			&http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", cfg.ProtectPort), Handler: a.protectMux(protectUpstream)},
+		)
 	}
 	if cfg.DemoApps {
 		servers = append(servers,
@@ -278,6 +331,16 @@ func (a *app) demoMux(appName, clientID, clientSecret string, port int, sessionC
 	mux.HandleFunc("/login", demo.login)
 	mux.HandleFunc("/callback", demo.callback)
 	mux.HandleFunc("/logout", demo.logout)
+	return mux
+}
+
+func (a *app) protectMux(upstream *url.URL) http.Handler {
+	protect := newProtectedApp(a, upstream, a.cfg.ProtectPort)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/__anyauth/login", protect.login)
+	mux.HandleFunc("/__anyauth/callback", protect.callback)
+	mux.HandleFunc("/__anyauth/logout", protect.logout)
+	mux.HandleFunc("/", protect.proxy)
 	return mux
 }
 
@@ -598,6 +661,264 @@ func (a *app) userinfo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tokenData.User)
 }
 
+type protectSessionContextKey struct{}
+
+type protectedApp struct {
+	root          *app
+	upstream      *url.URL
+	port          int
+	clientID      string
+	clientSecret  string
+	sessionCookie string
+	reverseProxy  *httputil.ReverseProxy
+}
+
+func newProtectedApp(root *app, upstream *url.URL, port int) *protectedApp {
+	app := &protectedApp{
+		root:          root,
+		upstream:      upstream,
+		port:          port,
+		clientID:      protectClientID(port),
+		clientSecret:  protectClientSecret(port),
+		sessionCookie: "anyauth_protect_session",
+	}
+	proxy := httputil.NewSingleHostReverseProxy(upstream)
+	originalDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		originalDirector(req)
+		req.Host = upstream.Host
+		stripAnyAuthHeaders(req.Header)
+		session, ok := req.Context().Value(protectSessionContextKey{}).(protectSession)
+		if !ok {
+			return
+		}
+		req.Header.Set("X-AnyAuth-Authenticated", "true")
+		setHeaderIfPresent(req.Header, "X-AnyAuth-Sub", claimString(session.Claims, "sub"))
+		setHeaderIfPresent(req.Header, "X-AnyAuth-Name", claimString(session.Claims, "name"))
+		setHeaderIfPresent(req.Header, "X-AnyAuth-Email", claimString(session.Claims, "email"))
+	}
+	app.reverseProxy = proxy
+	return app
+}
+
+func (p *protectedApp) redirectURI() string {
+	return protectRedirectURI(p.port)
+}
+
+func (p *protectedApp) login(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	state, err := jose.RandomURLToken(24)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	nonce, err := jose.RandomURLToken(24)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	verifier, err := jose.RandomURLToken(32)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	p.root.store.mu.Lock()
+	p.root.store.protectStates[state] = protectState{
+		Nonce:      nonce,
+		Verifier:   verifier,
+		ReturnPath: cleanReturnPath(r.URL.Query().Get("return")),
+		Created:    time.Now(),
+	}
+	p.root.store.mu.Unlock()
+
+	values := url.Values{
+		"response_type":         []string{"code"},
+		"client_id":             []string{p.clientID},
+		"redirect_uri":          []string{p.redirectURI()},
+		"scope":                 []string{"openid profile email"},
+		"state":                 []string{state},
+		"nonce":                 []string{nonce},
+		"code_challenge":        []string{jose.PKCES256(verifier)},
+		"code_challenge_method": []string{"S256"},
+	}
+	http.Redirect(w, r, p.root.issuer+"/authorize?"+values.Encode(), http.StatusFound)
+}
+
+func (p *protectedApp) callback(w http.ResponseWriter, r *http.Request) {
+	state := r.URL.Query().Get("state")
+	p.root.store.mu.Lock()
+	stateData, ok := p.root.store.protectStates[state]
+	if ok {
+		delete(p.root.store.protectStates, state)
+	}
+	p.root.store.mu.Unlock()
+	if !ok {
+		writeHTML(w, "Login Error", "<h1>Invalid state</h1>")
+		return
+	}
+
+	tokenResponse, err := p.exchangeCode(r.URL.Query().Get("code"), stateData.Verifier)
+	if err != nil {
+		writeHTML(w, "Token Error", "<h1>Token Error</h1><pre>"+html.EscapeString(err.Error())+"</pre>")
+		return
+	}
+	if tokenResponse.Error != "" {
+		body, _ := json.MarshalIndent(tokenResponse, "", "  ")
+		writeHTML(w, "Token Error", "<h1>Token Error</h1><pre>"+html.EscapeString(string(body))+"</pre>")
+		return
+	}
+
+	claims, err := jose.VerifyRS256JWT(tokenResponse.IDToken, &p.root.signingKey.PublicKey)
+	if err != nil {
+		writeHTML(w, "Login Error", "<h1>Invalid ID token</h1><pre>"+html.EscapeString(err.Error())+"</pre>")
+		return
+	}
+	if err := validateIDTokenClaims(claims, p.root.issuer, p.clientID, stateData.Nonce); err != nil {
+		writeHTML(w, "Login Error", "<h1>Invalid ID token claims</h1><pre>"+html.EscapeString(err.Error())+"</pre>")
+		return
+	}
+	sessionID, err := jose.RandomURLToken(32)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	p.root.store.mu.Lock()
+	p.root.store.protectSessions[sessionID] = protectSession{
+		Claims:    claims,
+		CreatedAt: time.Now(),
+	}
+	p.root.store.mu.Unlock()
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     p.sessionCookie,
+		Value:    sessionID,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	http.Redirect(w, r, stateData.ReturnPath, http.StatusFound)
+}
+
+func (p *protectedApp) proxy(w http.ResponseWriter, r *http.Request) {
+	session, ok := p.currentSession(r)
+	if !ok {
+		returnPath := cleanReturnPath(r.URL.RequestURI())
+		http.Redirect(w, r, "/__anyauth/login?return="+url.QueryEscape(returnPath), http.StatusFound)
+		return
+	}
+	ctx := context.WithValue(r.Context(), protectSessionContextKey{}, session)
+	p.reverseProxy.ServeHTTP(w, r.WithContext(ctx))
+}
+
+func (p *protectedApp) exchangeCode(code, verifier string) (tokenResponse, error) {
+	values := url.Values{
+		"grant_type":    []string{"authorization_code"},
+		"code":          []string{code},
+		"redirect_uri":  []string{p.redirectURI()},
+		"client_id":     []string{p.clientID},
+		"client_secret": []string{p.clientSecret},
+		"code_verifier": []string{verifier},
+	}
+	req, err := http.NewRequest(http.MethodPost, p.root.issuer+"/token", bytes.NewBufferString(values.Encode()))
+	if err != nil {
+		return tokenResponse{}, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return tokenResponse{}, err
+	}
+	defer resp.Body.Close()
+
+	var token tokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&token); err != nil {
+		return tokenResponse{}, err
+	}
+	return token, nil
+}
+
+func (p *protectedApp) logout(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie(p.sessionCookie); err == nil {
+		p.root.store.mu.Lock()
+		delete(p.root.store.protectSessions, cookie.Value)
+		p.root.store.mu.Unlock()
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     p.sessionCookie,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func (p *protectedApp) currentSession(r *http.Request) (protectSession, bool) {
+	cookie, err := r.Cookie(p.sessionCookie)
+	if err != nil {
+		return protectSession{}, false
+	}
+	p.root.store.mu.Lock()
+	defer p.root.store.mu.Unlock()
+	session, ok := p.root.store.protectSessions[cookie.Value]
+	return session, ok
+}
+
+func protectClientID(port int) string {
+	return fmt.Sprintf("anyauth-protect-%d", port)
+}
+
+func protectClientSecret(port int) string {
+	return fmt.Sprintf("anyauth-protect-%d-secret", port)
+}
+
+func protectRedirectURI(port int) string {
+	return fmt.Sprintf("http://127.0.0.1:%d/__anyauth/callback", port)
+}
+
+func cleanReturnPath(value string) string {
+	if value == "" || !strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") {
+		return "/"
+	}
+	return value
+}
+
+func stripAnyAuthHeaders(header http.Header) {
+	for _, name := range []string{
+		"X-AnyAuth-Authenticated",
+		"X-AnyAuth-Sub",
+		"X-AnyAuth-Name",
+		"X-AnyAuth-Email",
+	} {
+		header.Del(name)
+	}
+}
+
+func setHeaderIfPresent(header http.Header, name string, value string) {
+	if value == "" {
+		return
+	}
+	header.Set(name, value)
+}
+
+func claimString(claims map[string]any, key string) string {
+	value, ok := claims[key]
+	if !ok {
+		return ""
+	}
+	text, ok := value.(string)
+	if !ok {
+		return ""
+	}
+	return text
+}
+
 type demoApp struct {
 	root          *app
 	appName       string
@@ -729,10 +1050,14 @@ func (d *demoApp) callback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *demoApp) validateClaims(claims map[string]any, nonce string) error {
-	if claims["iss"] != d.root.issuer {
+	return validateIDTokenClaims(claims, d.root.issuer, d.clientID, nonce)
+}
+
+func validateIDTokenClaims(claims map[string]any, issuer string, clientID string, nonce string) error {
+	if claims["iss"] != issuer {
 		return fmt.Errorf("issuer mismatch")
 	}
-	if claims["aud"] != d.clientID {
+	if claims["aud"] != clientID {
 		return fmt.Errorf("audience mismatch")
 	}
 	if claims["nonce"] != nonce {

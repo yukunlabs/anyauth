@@ -27,10 +27,17 @@ app-b.localhost -> AnyAuth -> already logged in -> app-b logged in
 If a local PIN is configured, AnyAuth requires that PIN before creating the SSO
 session.
 
+The user can also put AnyAuth in front of a local upstream app. The protected
+proxy handles login and forwards authenticated requests with identity headers,
+so the upstream app can receive a trusted local user without implementing OIDC
+itself.
+
 ## Operating Modes
 
 - `serve` starts only the local provider and is the default path for real apps
   the user owns.
+- `protect` starts the provider plus a local reverse proxy in front of one
+  upstream app.
 - `demo` starts the provider plus two built-in demo apps for validating SSO
   behavior without creating a separate test application.
 
