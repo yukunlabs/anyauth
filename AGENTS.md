@@ -37,18 +37,20 @@ Before committing, run:
 make fmt
 make test
 make build
+make smoke-protect
 ```
 
 For protocol or UI-flow changes, also run a focused smoke test for the affected
 path. Examples:
 
 ```bash
-go run ./cmd/anyauth serve
-go run ./cmd/anyauth demo
-go run ./cmd/anyauth protect --upstream http://127.0.0.1:3000
-go run ./cmd/anyauth user show
-printf "123456\n" | go run ./cmd/anyauth user set-pin --pin-stdin
-go run ./cmd/anyauth user clear-pin
+make run
+make demo
+make dev-upstream
+make protect
+make user-show
+make set-pin PIN=123456
+make clear-pin
 ```
 
 ## Stack Direction

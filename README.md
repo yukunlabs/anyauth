@@ -45,7 +45,7 @@ mode when connecting AnyAuth to apps you own.
 Start any local web app, then put AnyAuth in front of it:
 
 ```bash
-go run ./cmd/anyauth protect --upstream http://127.0.0.1:3000
+make protect
 ```
 
 Open:
@@ -65,6 +65,28 @@ X-AnyAuth-Email: local.user@anyauth.local
 
 Use this when you want to put SSO in front of a local app without wiring OIDC
 into that app yet.
+
+For a quick manual test, run the bundled upstream test app in one terminal:
+
+```bash
+make dev-upstream
+```
+
+Then run the protected proxy in another terminal:
+
+```bash
+make protect
+```
+
+Open `http://127.0.0.1:7200/hello?x=1`. After login, the upstream page should
+show the request path and `X-AnyAuth-*` identity headers.
+
+Override ports or upstream URL when needed:
+
+```bash
+make dev-upstream UPSTREAM_PORT=4000
+make protect UPSTREAM=http://127.0.0.1:4000 PROTECT_PORT=7400
+```
 
 ## Run The Local Demo
 
@@ -178,9 +200,10 @@ See [docs/stack-decision.md](docs/stack-decision.md).
 
 ```bash
 go test ./...
-go run ./cmd/anyauth serve
-go run ./cmd/anyauth demo
-go run ./cmd/anyauth protect --upstream http://127.0.0.1:3000
+make run
+make demo
+make protect
+make smoke-protect
 ```
 
 Or use `make`:
@@ -191,6 +214,9 @@ make test
 make build
 make run
 make demo
+make protect
+make dev-upstream
+make smoke-protect
 ```
 
 Build a local binary:
