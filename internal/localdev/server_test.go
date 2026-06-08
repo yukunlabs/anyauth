@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yukunlabs/anyauth/internal/clientregistry"
 )
 
 func TestLocalSSOFlow(t *testing.T) {
@@ -20,6 +22,16 @@ func TestLocalSSOFlow(t *testing.T) {
 		AppBPort:     freePort(t),
 		DataDir:      t.TempDir(),
 	}
+	_, err := clientregistry.Add(cfg.DataDir, clientregistry.Client{
+		ID:           "custom-app",
+		Name:         "Custom App",
+		Secret:       "custom-secret",
+		RedirectURIs: []string{"http://127.0.0.1:18080/callback"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	servers, cfg, err := Start(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -54,6 +66,20 @@ func TestLocalSSOFlow(t *testing.T) {
 	body = mustGetBody(t, client, provider+"/jwks.json", http.StatusOK)
 	if !strings.Contains(body, `"alg":"RS256"`) {
 		t.Fatalf("JWKS RS256 key missing from %s", body)
+	}
+	customAuthorize := provider + "/authorize?" + url.Values{
+		"response_type":         []string{"code"},
+		"client_id":             []string{"custom-app"},
+		"redirect_uri":          []string{"http://127.0.0.1:18080/callback"},
+		"scope":                 []string{"openid profile email"},
+		"state":                 []string{"custom-state"},
+		"nonce":                 []string{"custom-nonce"},
+		"code_challenge":        []string{"custom-challenge"},
+		"code_challenge_method": []string{"S256"},
+	}.Encode()
+	body = mustGetBody(t, client, customAuthorize, http.StatusOK)
+	if !strings.Contains(body, "Sign in with AnyAuth") {
+		t.Fatalf("expected custom client to reach login page, got %s", body)
 	}
 
 	authorizeURL := mustGetLocation(t, client, appA+"/login")

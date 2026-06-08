@@ -7,7 +7,7 @@ be treated as production identity infrastructure.
 
 - The provider binds to `127.0.0.1`.
 - The only user is the local operator.
-- Client registry is static and in-memory.
+- Client registry is stored as local JSON in the AnyAuth data directory.
 - Sessions, codes, and tokens are in-memory.
 - The login screen has no real password or biometric verification yet.
 
@@ -29,13 +29,14 @@ be treated as production identity infrastructure.
 - No key rotation.
 - No phishing-resistant local user verification.
 - No conformance test suite.
+- Client secrets are stored in local plaintext JSON.
 - Demo claim validation handles only the simple v0 shape, not all OIDC edge
   cases such as array audiences, `azp`, or clock skew policy.
 
 ## Intended Next Security Milestones
 
 1. Add real local user verification with passkey or OS credential prompt.
-2. Replace in-memory state with a local encrypted store.
+2. Replace local plaintext secrets and in-memory state with an encrypted store.
 3. Add structured protocol tests and negative cases.
 4. Add refresh token rotation.
 5. Evaluate replacing the prototype core with a mature OIDC library.

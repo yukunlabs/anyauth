@@ -42,6 +42,39 @@ Try App A first, click login, continue as the local user, then open App B.
 App B should complete login through the same provider session without asking
 you to log in again.
 
+## Register Your Own Local App
+
+Add a client:
+
+```bash
+go run ./cmd/anyauth clients add \
+  --id my-app \
+  --name "My App" \
+  --redirect-uri http://127.0.0.1:3000/callback
+```
+
+List clients:
+
+```bash
+go run ./cmd/anyauth clients list
+```
+
+Then start AnyAuth with the same data directory:
+
+```bash
+go run ./cmd/anyauth serve
+```
+
+Use the generated client secret and this issuer in your app:
+
+```text
+Issuer: http://127.0.0.1:7100
+Authorization endpoint: http://127.0.0.1:7100/authorize
+Token endpoint: http://127.0.0.1:7100/token
+JWKS URI: http://127.0.0.1:7100/jwks.json
+UserInfo endpoint: http://127.0.0.1:7100/userinfo
+```
+
 ## Initial Scope
 
 The local demo includes:
@@ -50,6 +83,7 @@ The local demo includes:
 - JWKS endpoint
 - Authorization Code flow with PKCE
 - Local provider session
+- Persistent local client registry
 - ID token signing with a locally generated RSA key
 - UserInfo endpoint
 - Two demo clients

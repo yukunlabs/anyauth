@@ -12,12 +12,14 @@ for apps owned by the same developer.
 - Demo App B on `127.0.0.1:7102`
 - Authorization Code flow with PKCE
 - One local user
-- In-memory clients, authorization codes, access tokens, and sessions
+- Persistent local client registry
+- In-memory authorization codes, access tokens, and sessions
 - Discovery endpoint
 - JWKS endpoint
 - UserInfo endpoint
 - RS256 ID token signing through a local RSA key
 - Single Go binary entrypoint through `cmd/anyauth`
+- `clients add` and `clients list` CLI commands
 
 ## Out Of Scope
 

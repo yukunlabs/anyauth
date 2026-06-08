@@ -15,11 +15,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/yukunlabs/anyauth/internal/clientregistry"
 	"github.com/yukunlabs/anyauth/internal/jose"
 )
 
@@ -183,6 +185,22 @@ func Start(cfg Config) (*ServerSet, Config, error) {
 			},
 		},
 	}
+	registeredClients, err := clientregistry.Load(cfg.DataDir)
+	if err != nil {
+		return nil, cfg, err
+	}
+	for _, registered := range registeredClients {
+		redirectURIs := map[string]bool{}
+		for _, redirectURI := range registered.RedirectURIs {
+			redirectURIs[redirectURI] = true
+		}
+		a.clients[registered.ID] = client{
+			ID:           registered.ID,
+			Name:         registered.Name,
+			Secret:       registered.Secret,
+			RedirectURIs: redirectURIs,
+		}
+	}
 
 	servers := []*http.Server{
 		{Addr: fmt.Sprintf("127.0.0.1:%d", cfg.ProviderPort), Handler: a.providerMux()},
@@ -255,7 +273,36 @@ func (a *app) providerHome(w http.ResponseWriter, r *http.Request) {
   <li><a href="/jwks.json">JWKS</a></li>
   <li><a href="http://127.0.0.1:%d">Demo App A</a></li>
   <li><a href="http://127.0.0.1:%d">Demo App B</a></li>
-</ul>`, a.cfg.AppAPort, a.cfg.AppBPort))
+</ul>
+<h2>Registered clients</h2>
+%s`, a.cfg.AppAPort, a.cfg.AppBPort, a.clientsHTML()))
+}
+
+func (a *app) clientsHTML() string {
+	if len(a.clients) == 0 {
+		return `<p class="muted">No clients registered.</p>`
+	}
+
+	ids := make([]string, 0, len(a.clients))
+	for id := range a.clients {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	var body strings.Builder
+	body.WriteString("<ul>")
+	for _, id := range ids {
+		client := a.clients[id]
+		body.WriteString("<li>")
+		body.WriteString(html.EscapeString(client.ID))
+		if client.Name != "" && client.Name != client.ID {
+			body.WriteString(" - ")
+			body.WriteString(html.EscapeString(client.Name))
+		}
+		body.WriteString("</li>")
+	}
+	body.WriteString("</ul>")
+	return body.String()
 }
 
 func (a *app) discovery(w http.ResponseWriter, r *http.Request) {
