@@ -49,6 +49,7 @@ make protect
 make protect-agent
 make agent-add
 make delegate-token
+make audit-list
 make user-show
 make set-pin PIN=123456
 make clear-pin

@@ -10,7 +10,7 @@ AGENT_ID ?= codex
 AGENT_NAME ?= Codex Local Agent
 DELEGATION_SCOPE ?= app.read
 
-.PHONY: fmt fmt-check test build script-check smoke-protect smoke-agent-protect verify ci run demo protect protect-agent dev-upstream user-show set-pin clear-pin agent-add agents-list delegate-token delegate-list clean clean-state
+.PHONY: fmt fmt-check test build script-check smoke-protect smoke-agent-protect verify ci run demo protect protect-agent dev-upstream user-show set-pin clear-pin agent-add agents-list delegate-token delegate-list audit-list clean clean-state
 
 fmt:
 	gofmt -w cmd internal
@@ -72,6 +72,9 @@ delegate-token:
 
 delegate-list:
 	go run ./cmd/anyauth delegate list -data-dir $(DATA_DIR)
+
+audit-list:
+	go run ./cmd/anyauth audit list -data-dir $(DATA_DIR)
 
 clean:
 	rm -rf bin __pycache__ scripts/__pycache__

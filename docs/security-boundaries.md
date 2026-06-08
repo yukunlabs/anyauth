@@ -13,6 +13,7 @@ be treated as production identity infrastructure.
 - Agent registry is stored as local JSON in the AnyAuth data directory.
 - Agent delegation records are stored as local JSON in the AnyAuth data
   directory.
+- Audit events are stored as local JSON Lines in the AnyAuth data directory.
 - Local user profile is stored as local JSON in the AnyAuth data directory.
 - Sessions, codes, and tokens are in-memory.
 - When configured, the login screen requires a local PIN before creating the
@@ -41,6 +42,8 @@ be treated as production identity infrastructure.
   from agent traffic.
 - In agent delegation mode, the protected proxy removes the incoming
   `Authorization` header before forwarding to the upstream app.
+- Delegation creation, revocation, protected proxy allow, and protected proxy
+  deny events are appended to a local audit timeline.
 - Access tokens must be presented as Bearer tokens for UserInfo.
 - PINs are stored as salted PBKDF2-SHA256 verifiers, not plaintext.
 - PIN verification is optional and can be disabled with `user clear-pin`.
@@ -55,6 +58,7 @@ be treated as production identity infrastructure.
 - No conformance test suite.
 - Client secrets are stored in local plaintext JSON.
 - Agent metadata and delegation records are stored in local plaintext JSON.
+- Audit events are stored in local plaintext JSON Lines.
 - Delegation tokens are Bearer tokens. Anyone who obtains one can use it until
   it expires or is revoked.
 - Delegation token creation is a local CLI action, not a full interactive

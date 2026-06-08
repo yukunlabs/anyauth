@@ -113,6 +113,7 @@ Terminal 3:
 make agent-add
 TOKEN=$(make delegate-token)
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7200/hello?x=1
+make audit-list
 ```
 
 If your local profile uses a custom PIN, pass it to the token target:
@@ -135,6 +136,9 @@ X-AnyAuth-Scopes: app.read
 
 Without a valid delegation token, `protect-agent` returns `401` instead of
 redirecting to the browser login flow.
+
+`audit-list` shows local delegation and proxy allow/deny events without storing
+the delegation token plaintext.
 
 ## Run The Local Demo
 
@@ -224,6 +228,7 @@ The current prototype includes:
 - Persistent local client registry
 - Persistent local agent registry
 - Short-lived agent delegation tokens
+- Local audit timeline for delegation and protected proxy events
 - Client and user management CLI commands
 - ID token signing with a locally generated RSA key
 - UserInfo endpoint
@@ -270,6 +275,7 @@ make protect-agent
 make dev-upstream
 make agent-add
 make delegate-token
+make audit-list
 make clean
 make clean-state
 ```

@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/yukunlabs/anyauth/internal/auditlog"
 	"github.com/yukunlabs/anyauth/internal/clientregistry"
 	"github.com/yukunlabs/anyauth/internal/delegation"
 	"github.com/yukunlabs/anyauth/internal/jose"
@@ -835,21 +836,26 @@ func (p *protectedApp) callback(w http.ResponseWriter, r *http.Request) {
 func (p *protectedApp) proxy(w http.ResponseWriter, r *http.Request) {
 	token, hasBearer, err := bearerToken(r)
 	if err != nil {
+		p.auditProxyDeny(r, err)
 		writeDelegationUnauthorized(w, err)
 		return
 	}
 	if hasBearer {
 		identity, err := p.delegatedIdentity(token)
 		if err != nil {
+			p.auditProxyDeny(r, err)
 			writeDelegationUnauthorized(w, err)
 			return
 		}
+		p.auditProxyAllow(r, identity)
 		ctx := context.WithValue(r.Context(), protectSessionContextKey{}, identity)
 		p.reverseProxy.ServeHTTP(w, r.WithContext(ctx))
 		return
 	}
 	if p.root.cfg.RequireDelegation {
-		writeDelegationUnauthorized(w, fmt.Errorf("delegation bearer token is required"))
+		err := fmt.Errorf("delegation bearer token is required")
+		p.auditProxyDeny(r, err)
+		writeDelegationUnauthorized(w, err)
 		return
 	}
 
@@ -914,6 +920,38 @@ func writeDelegationUnauthorized(w http.ResponseWriter, err error) {
 		"error":             "invalid_token",
 		"error_description": err.Error(),
 	})
+}
+
+func (p *protectedApp) auditProxyAllow(r *http.Request, identity protectIdentity) {
+	p.appendAudit(auditlog.Event{
+		Type:         "proxy.allow",
+		Decision:     "allow",
+		ActorType:    identity.ActorType,
+		HumanSub:     identity.HumanSub,
+		AgentID:      identity.AgentID,
+		DelegationID: identity.DelegationID,
+		TokenID:      identity.TokenID,
+		Audience:     delegation.AudienceForProtectPort(p.port),
+		Scopes:       identity.Scopes,
+		Resource:     r.URL.RequestURI(),
+	})
+}
+
+func (p *protectedApp) auditProxyDeny(r *http.Request, cause error) {
+	p.appendAudit(auditlog.Event{
+		Type:      "proxy.deny",
+		Decision:  "deny",
+		ActorType: "agent",
+		Audience:  delegation.AudienceForProtectPort(p.port),
+		Resource:  r.URL.RequestURI(),
+		Reason:    cause.Error(),
+	})
+}
+
+func (p *protectedApp) appendAudit(event auditlog.Event) {
+	if _, err := auditlog.Append(p.root.cfg.DataDir, event); err != nil {
+		log.Printf("failed to append audit event: %v", err)
+	}
 }
 
 func (p *protectedApp) exchangeCode(code, verifier string) (tokenResponse, error) {

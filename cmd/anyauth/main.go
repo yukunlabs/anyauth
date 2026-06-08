@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yukunlabs/anyauth/internal/agentregistry"
+	"github.com/yukunlabs/anyauth/internal/auditlog"
 	"github.com/yukunlabs/anyauth/internal/clientregistry"
 	"github.com/yukunlabs/anyauth/internal/delegation"
 	"github.com/yukunlabs/anyauth/internal/jose"
@@ -37,6 +38,8 @@ func main() {
 		agents(os.Args[2:])
 	case "delegate":
 		delegate(os.Args[2:])
+	case "audit":
+		audit(os.Args[2:])
 	case "user":
 		user(os.Args[2:])
 	case "version":
@@ -415,6 +418,20 @@ func delegateCreate(args []string) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	if _, err := auditlog.Append(*dataDir, auditlog.Event{
+		Type:         "delegation.create",
+		Decision:     "allow",
+		ActorType:    "human",
+		HumanSub:     record.HumanSub,
+		AgentID:      record.AgentID,
+		DelegationID: record.ID,
+		TokenID:      record.TokenID,
+		Audience:     record.Audience,
+		Scopes:       record.Scopes,
+		Note:         record.Note,
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to append audit event: %v\n", err)
+	}
 
 	switch *format {
 	case "token":
@@ -507,7 +524,83 @@ func delegateRevoke(args []string) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	if _, err := auditlog.Append(*dataDir, auditlog.Event{
+		Type:         "delegation.revoke",
+		Decision:     "revoke",
+		ActorType:    "human",
+		HumanSub:     record.HumanSub,
+		AgentID:      record.AgentID,
+		DelegationID: record.ID,
+		TokenID:      record.TokenID,
+		Audience:     record.Audience,
+		Scopes:       record.Scopes,
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to append audit event: %v\n", err)
+	}
 	fmt.Printf("Revoked delegation %q\n", record.ID)
+}
+
+func audit(args []string) {
+	if len(args) < 1 {
+		auditUsage()
+		os.Exit(2)
+	}
+
+	switch args[0] {
+	case "list":
+		auditList(args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "unknown audit command: %s\n\n", args[0])
+		auditUsage()
+		os.Exit(2)
+	}
+}
+
+func auditList(args []string) {
+	fs := flag.NewFlagSet("audit list", flag.ExitOnError)
+	dataDir := fs.String("data-dir", ".anyauth", "local AnyAuth data directory")
+	format := fs.String("format", "table", "output format: table or json")
+	limit := fs.Int("limit", 50, "maximum number of events to show; 0 means all")
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+
+	events, err := auditlog.Load(*dataDir, *limit)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	switch *format {
+	case "json":
+		raw, err := json.MarshalIndent(events, "", "  ")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Println(string(raw))
+	case "table":
+		if len(events) == 0 {
+			fmt.Println("No audit events recorded.")
+			return
+		}
+		for _, event := range events {
+			fmt.Printf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				event.Time.Format(time.RFC3339),
+				event.Type,
+				event.Decision,
+				event.ActorType,
+				event.HumanSub,
+				event.AgentID,
+				event.Resource,
+				event.Reason,
+			)
+		}
+	default:
+		fmt.Fprintf(os.Stderr, "unknown format: %s\n", *format)
+		os.Exit(2)
+	}
 }
 
 func user(args []string) {
@@ -691,6 +784,7 @@ Usage:
   anyauth agents list [flags]
   anyauth delegate create --agent <id> [flags]
   anyauth delegate list [flags]
+  anyauth audit list [flags]
   anyauth user show [flags]
   anyauth user set-pin [flags]
   anyauth user clear-pin [flags]
@@ -705,6 +799,7 @@ Examples:
   go run ./cmd/anyauth clients list
   go run ./cmd/anyauth agents add --id codex --name "Codex Local Agent"
   go run ./cmd/anyauth delegate create --agent codex --scope app.read --format token
+  go run ./cmd/anyauth audit list
   printf "123456\n" | go run ./cmd/anyauth user set-pin --pin-stdin
   go run ./cmd/anyauth user clear-pin
 
@@ -756,6 +851,20 @@ Examples:
   anyauth delegate create --agent codex --scope app.read --format token
   anyauth delegate list
   anyauth delegate revoke --id del_...
+
+`)
+}
+
+func auditUsage() {
+	fmt.Print(`Read the local AnyAuth audit timeline.
+
+Usage:
+  anyauth audit list [flags]
+
+Examples:
+  anyauth audit list
+  anyauth audit list --limit 20
+  anyauth audit list --format json
 
 `)
 }

@@ -20,6 +20,7 @@ upstream app through a short-lived delegation token.
 - Persistent local client registry
 - Persistent local agent registry
 - Persistent local delegation records without storing token plaintext
+- Local audit timeline for delegation and protected proxy decisions
 - In-memory authorization codes, access tokens, and sessions
 - Discovery endpoint
 - JWKS endpoint
@@ -33,6 +34,7 @@ upstream app through a short-lived delegation token.
 - `clients add` and `clients list` CLI commands
 - `agents add`, `agents list`, and `agents remove` CLI commands
 - `delegate create`, `delegate list`, and `delegate revoke` CLI commands
+- `audit list` CLI command
 - `user show`, `user set-pin`, and `user clear-pin` CLI commands
 
 ## Out Of Scope
@@ -60,6 +62,8 @@ upstream app through a short-lived delegation token.
   proxied to the upstream app with human, agent, delegation, and scope headers.
 - In agent delegation mode, a request without a valid delegation token returns
   `401`.
+- Delegation creation, proxy allow, proxy deny, and delegation revocation can be
+  inspected through `audit list`.
 - The provider exposes standard-looking OIDC metadata and JWKS.
 - The repo explains the security boundary clearly.
 - The first implementation has no third-party Go dependencies.

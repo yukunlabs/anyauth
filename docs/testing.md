@@ -79,6 +79,7 @@ Terminal 3:
 make agent-add
 TOKEN=$(make delegate-token)
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7200/hello?x=1
+make audit-list
 ```
 
 If the local profile has a non-default PIN, use:
@@ -96,6 +97,7 @@ Expected result:
   and `X-AnyAuth-Scopes`.
 - The upstream app still receives the delegated local user through
   `X-AnyAuth-Sub`, `X-AnyAuth-Name`, and `X-AnyAuth-Email`.
+- `audit-list` shows delegation creation and proxy allow/deny events.
 
 Automated smoke coverage:
 

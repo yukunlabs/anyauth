@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/yukunlabs/anyauth/internal/agentregistry"
+	"github.com/yukunlabs/anyauth/internal/auditlog"
 	"github.com/yukunlabs/anyauth/internal/clientregistry"
 	"github.com/yukunlabs/anyauth/internal/delegation"
 	"github.com/yukunlabs/anyauth/internal/jose"
@@ -501,6 +502,23 @@ func TestProtectGatewayWithDelegation(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		raw, _ := io.ReadAll(resp.Body)
 		t.Fatalf("tampered token status = %d, want 401, body: %s", resp.StatusCode, string(raw))
+	}
+
+	events, err := auditlog.Load(dataDir, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 3 {
+		t.Fatalf("audit event count = %d, want 3: %+v", len(events), events)
+	}
+	if events[0].Type != "proxy.deny" || events[0].Decision != "deny" || !strings.Contains(events[0].Reason, "required") {
+		t.Fatalf("unexpected first audit event: %+v", events[0])
+	}
+	if events[1].Type != "proxy.allow" || events[1].Decision != "allow" || events[1].AgentID != "codex" || events[1].DelegationID != record.ID {
+		t.Fatalf("unexpected second audit event: %+v", events[1])
+	}
+	if events[2].Type != "proxy.deny" || events[2].Decision != "deny" {
+		t.Fatalf("unexpected third audit event: %+v", events[2])
 	}
 }
 
