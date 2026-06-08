@@ -17,12 +17,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
 
-      - name: Check formatting
-        run: |
-          gofmt -w cmd internal
-          git diff --exit-code
-
-      - name: Test
-        run: go test ./...
+      - name: Verify
+        run: make ci

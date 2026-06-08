@@ -14,13 +14,11 @@ Every commit should be a closed loop:
 - It includes verification before commit, usually:
 
 ```bash
-make fmt
-make test
-make build
+make verify
 ```
 
 For UI or protocol-flow changes, also run a local smoke test against the
-affected path.
+affected path. See `docs/testing.md` for the product smoke test ladder.
 
 ## Experimental Release Policy
 

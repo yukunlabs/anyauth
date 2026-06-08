@@ -15,6 +15,7 @@ Read these files before changing behavior:
 - `docs/security-boundaries.md`
 - `docs/stack-decision.md`
 - `docs/mvp-scope.md`
+- `docs/testing.md`
 
 ## Working Rules
 
@@ -34,14 +35,11 @@ Read these files before changing behavior:
 Before committing, run:
 
 ```bash
-make fmt
-make test
-make build
-make smoke-protect
+make verify
 ```
 
-For protocol or UI-flow changes, also run a focused smoke test for the affected
-path. Examples:
+For protocol or UI-flow changes, also run the affected product flow manually.
+Examples:
 
 ```bash
 make run
@@ -52,6 +50,10 @@ make user-show
 make set-pin PIN=123456
 make clear-pin
 ```
+
+Use `make clean` for build outputs and `make clean-state` for local AnyAuth
+runtime state. Keep them separate because `.anyauth/` contains local identity
+state used during debugging.
 
 ## Stack Direction
 

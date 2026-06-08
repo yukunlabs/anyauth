@@ -30,7 +30,7 @@ Requirements:
 Start the provider:
 
 ```bash
-go run ./cmd/anyauth serve
+make run
 ```
 
 Open:
@@ -93,7 +93,7 @@ make protect UPSTREAM=http://127.0.0.1:4000 PROTECT_PORT=7400
 Start the provider and two demo apps:
 
 ```bash
-go run ./cmd/anyauth demo
+make demo
 ```
 
 Open:
@@ -126,7 +126,7 @@ go run ./cmd/anyauth clients list
 Then start AnyAuth with the same data directory:
 
 ```bash
-go run ./cmd/anyauth serve
+make run
 ```
 
 Use the generated client secret and this issuer in your app:
@@ -146,13 +146,13 @@ AnyAuth can require a local PIN before it creates the provider SSO session.
 Show the local user profile:
 
 ```bash
-go run ./cmd/anyauth user show
+make user-show
 ```
 
 Set a PIN:
 
 ```bash
-printf "123456\n" | go run ./cmd/anyauth user set-pin --pin-stdin
+make set-pin PIN=123456
 ```
 
 After a PIN is configured, the provider login page will require that PIN before
@@ -161,7 +161,7 @@ redirecting back to the client app.
 Clear the PIN and return to the no-PIN development login:
 
 ```bash
-go run ./cmd/anyauth user clear-pin
+make clear-pin
 ```
 
 ## Initial Scope
@@ -198,25 +198,25 @@ See [docs/stack-decision.md](docs/stack-decision.md).
 
 ## Development
 
+Use the full local verification gate before committing:
+
 ```bash
-go test ./...
-make run
-make demo
-make protect
-make smoke-protect
+make verify
 ```
 
-Or use `make`:
+The main development commands are:
 
 ```bash
 make fmt
 make test
 make build
+make smoke-protect
 make run
 make demo
 make protect
 make dev-upstream
-make smoke-protect
+make clean
+make clean-state
 ```
 
 Build a local binary:
@@ -228,5 +228,7 @@ go build -o bin/anyauth ./cmd/anyauth
 During the experimental phase, every commit should be a closed loop and release
 tags should only be created when explicitly planned. See
 [docs/development-process.md](docs/development-process.md).
+
+See [docs/testing.md](docs/testing.md) for the product smoke test flow.
 
 AI agents should start with [AGENTS.md](AGENTS.md).
