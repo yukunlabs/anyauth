@@ -126,5 +126,6 @@ Build a local binary:
 go build -o bin/anyauth ./cmd/anyauth
 ```
 
-The repository starts as a local Git repository. Create the GitHub remote once
-the first runnable Go version has been verified locally.
+During the experimental phase, every commit should be a closed loop and release
+tags should only be created when explicitly planned. See
+[docs/development-process.md](docs/development-process.md).
