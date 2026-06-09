@@ -16,6 +16,8 @@ ANYAUTH_HEADERS = [
     "X-AnyAuth-Agent-Name",
     "X-AnyAuth-Delegation-ID",
     "X-AnyAuth-Token-ID",
+    "X-AnyAuth-Task-ID",
+    "X-AnyAuth-Task-Name",
     "X-AnyAuth-Scopes",
 ]
 

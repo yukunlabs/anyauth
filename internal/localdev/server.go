@@ -123,6 +123,8 @@ type protectIdentity struct {
 	AgentName    string
 	DelegationID string
 	TokenID      string
+	TaskID       string
+	TaskName     string
 	Scopes       []string
 }
 
@@ -726,6 +728,8 @@ func newProtectedApp(root *app, upstream *url.URL, port int) *protectedApp {
 		setHeaderIfPresent(req.Header, "X-AnyAuth-Agent-Name", identity.AgentName)
 		setHeaderIfPresent(req.Header, "X-AnyAuth-Delegation-ID", identity.DelegationID)
 		setHeaderIfPresent(req.Header, "X-AnyAuth-Token-ID", identity.TokenID)
+		setHeaderIfPresent(req.Header, "X-AnyAuth-Task-ID", identity.TaskID)
+		setHeaderIfPresent(req.Header, "X-AnyAuth-Task-Name", identity.TaskName)
 		setHeaderIfPresent(req.Header, "X-AnyAuth-Scopes", strings.Join(identity.Scopes, " "))
 	}
 	app.reverseProxy = proxy
@@ -907,6 +911,8 @@ func (p *protectedApp) delegatedIdentity(token string) (protectIdentity, error) 
 		AgentName:    record.AgentName,
 		DelegationID: record.ID,
 		TokenID:      record.TokenID,
+		TaskID:       record.TaskID,
+		TaskName:     record.TaskName,
 		Scopes:       ctx.Scopes,
 	}, nil
 }
@@ -962,6 +968,8 @@ func (p *protectedApp) auditProxyAllow(r *http.Request, identity protectIdentity
 		AgentID:      identity.AgentID,
 		DelegationID: identity.DelegationID,
 		TokenID:      identity.TokenID,
+		TaskID:       identity.TaskID,
+		TaskName:     identity.TaskName,
 		Audience:     delegation.AudienceForProtectPort(p.port),
 		Scopes:       identity.Scopes,
 		Resource:     r.URL.RequestURI(),
@@ -978,6 +986,8 @@ func (p *protectedApp) auditPolicyDeny(r *http.Request, identity protectIdentity
 		AgentID:      identity.AgentID,
 		DelegationID: identity.DelegationID,
 		TokenID:      identity.TokenID,
+		TaskID:       identity.TaskID,
+		TaskName:     identity.TaskName,
 		Audience:     delegation.AudienceForProtectPort(p.port),
 		Scopes:       identity.Scopes,
 		Resource:     r.URL.RequestURI(),

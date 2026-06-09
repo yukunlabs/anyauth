@@ -25,6 +25,8 @@ type Event struct {
 	AgentID      string    `json:"agent_id,omitempty"`
 	DelegationID string    `json:"delegation_id,omitempty"`
 	TokenID      string    `json:"token_id,omitempty"`
+	TaskID       string    `json:"task_id,omitempty"`
+	TaskName     string    `json:"task_name,omitempty"`
 	Audience     string    `json:"audience,omitempty"`
 	Scopes       []string  `json:"scopes,omitempty"`
 	Resource     string    `json:"resource,omitempty"`
@@ -136,6 +138,8 @@ func normalize(event Event) Event {
 	event.AgentID = strings.TrimSpace(event.AgentID)
 	event.DelegationID = strings.TrimSpace(event.DelegationID)
 	event.TokenID = strings.TrimSpace(event.TokenID)
+	event.TaskID = strings.TrimSpace(event.TaskID)
+	event.TaskName = strings.TrimSpace(event.TaskName)
 	event.Audience = strings.TrimSpace(event.Audience)
 	event.Resource = strings.TrimSpace(event.Resource)
 	event.Reason = strings.TrimSpace(event.Reason)

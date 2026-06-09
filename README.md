@@ -134,6 +134,8 @@ X-AnyAuth-Sub: local-user
 X-AnyAuth-Human-Sub: local-user
 X-AnyAuth-Agent-ID: codex
 X-AnyAuth-Delegation-ID: del_...
+X-AnyAuth-Task-ID: task_...
+X-AnyAuth-Task-Name: Local demo task
 X-AnyAuth-Scopes: app.read
 ```
 
@@ -235,6 +237,7 @@ The current prototype includes:
 - Persistent local client registry
 - Persistent local agent registry
 - Short-lived agent delegation tokens
+- Task-scoped delegation metadata in tokens, headers, and audit events
 - Local path/method/scope policies for delegated agent requests
 - Local audit timeline for delegation and protected proxy events
 - Client and user management CLI commands

@@ -402,6 +402,7 @@ func TestProtectGatewayWithDelegation(t *testing.T) {
 		Audience: delegation.AudienceForProtectPort(protectPort),
 		Human:    userstore.DefaultProfile(),
 		Agent:    agent,
+		TaskName: "Morning demo task",
 		Scopes:   []string{"app.read", "app.write"},
 		Note:     "protect gateway test",
 		TTL:      30 * time.Minute,
@@ -412,7 +413,7 @@ func TestProtectGatewayWithDelegation(t *testing.T) {
 	}
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "path=%s authenticated=%s actor=%s sub=%s human=%s agent=%s delegation=%s scopes=%s authz=%s",
+		fmt.Fprintf(w, "path=%s authenticated=%s actor=%s sub=%s human=%s agent=%s delegation=%s task=%s scopes=%s authz=%s",
 			r.URL.String(),
 			r.Header.Get("X-AnyAuth-Authenticated"),
 			r.Header.Get("X-AnyAuth-Actor-Type"),
@@ -420,6 +421,7 @@ func TestProtectGatewayWithDelegation(t *testing.T) {
 			r.Header.Get("X-AnyAuth-Human-Sub"),
 			r.Header.Get("X-AnyAuth-Agent-ID"),
 			r.Header.Get("X-AnyAuth-Delegation-ID"),
+			r.Header.Get("X-AnyAuth-Task-Name"),
 			r.Header.Get("X-AnyAuth-Scopes"),
 			r.Header.Get("Authorization"),
 		)
@@ -480,6 +482,7 @@ func TestProtectGatewayWithDelegation(t *testing.T) {
 		"human=local-user",
 		"agent=codex",
 		"delegation=" + record.ID,
+		"task=Morning demo task",
 		"scopes=app.read app.write",
 		"authz=",
 	} {
@@ -518,6 +521,9 @@ func TestProtectGatewayWithDelegation(t *testing.T) {
 	}
 	if events[1].Type != "proxy.allow" || events[1].Decision != "allow" || events[1].AgentID != "codex" || events[1].DelegationID != record.ID {
 		t.Fatalf("unexpected second audit event: %+v", events[1])
+	}
+	if events[1].TaskName != "Morning demo task" {
+		t.Fatalf("audit event task = %q, want Morning demo task", events[1].TaskName)
 	}
 	if events[2].Type != "proxy.deny" || events[2].Decision != "deny" {
 		t.Fatalf("unexpected third audit event: %+v", events[2])

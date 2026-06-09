@@ -28,6 +28,7 @@ func TestCreateAndValidateDelegationToken(t *testing.T) {
 		Audience: AudienceForProtectPort(7200),
 		Human:    userstore.DefaultProfile(),
 		Agent:    agent,
+		TaskName: "Triage local issues",
 		Scopes:   []string{"app.read", "app.write"},
 		Note:     "test delegation",
 		TTL:      30 * time.Minute,
@@ -42,6 +43,9 @@ func TestCreateAndValidateDelegationToken(t *testing.T) {
 	}
 	if record.TokenSHA256 == "" || strings.Contains(record.TokenSHA256, token) {
 		t.Fatalf("unexpected token hash: %s", record.TokenSHA256)
+	}
+	if record.TaskID == "" || record.TaskName != "Triage local issues" {
+		t.Fatalf("unexpected task fields: %+v", record)
 	}
 
 	ctx, err := ValidateToken(token, ValidateOptions{
@@ -59,6 +63,9 @@ func TestCreateAndValidateDelegationToken(t *testing.T) {
 	}
 	if ctx.Agent.ID != "codex" {
 		t.Fatalf("agent id = %s, want codex", ctx.Agent.ID)
+	}
+	if ctx.Delegation.TaskID != record.TaskID || ctx.Delegation.TaskName != "Triage local issues" {
+		t.Fatalf("task fields = %+v, want %+v", ctx.Delegation, record)
 	}
 	if strings.Join(ctx.Scopes, " ") != "app.read app.write" {
 		t.Fatalf("scopes = %v", ctx.Scopes)

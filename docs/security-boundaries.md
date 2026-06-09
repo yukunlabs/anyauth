@@ -41,6 +41,8 @@ be treated as production identity infrastructure.
 - Delegation tokens use an explicit actor claim plus AnyAuth-specific
   delegation metadata, so upstream apps can distinguish human browser traffic
   from agent traffic.
+- Delegation tokens can carry task metadata so upstream apps and audit logs can
+  tie agent requests back to the local task context.
 - In agent delegation mode, the protected proxy removes the incoming
   `Authorization` header before forwarding to the upstream app.
 - In agent delegation mode, the protected proxy can enforce local method,

@@ -353,6 +353,8 @@ func delegateCreate(args []string) {
 	issuer := fs.String("issuer", "", "issuer override; defaults to provider port")
 	audience := fs.String("audience", "", "audience override; defaults to protected proxy id")
 	ttl := fs.Duration("ttl", 30*time.Minute, "delegation token lifetime")
+	task := fs.String("task", "", "optional task name for this delegation")
+	taskID := fs.String("task-id", "", "optional stable task id; generated when omitted and --task is set")
 	note := fs.String("note", "", "optional local note for this delegation")
 	format := fs.String("format", "text", "output format: text, json, or token")
 	pin := fs.String("pin", "", "PIN value; prefer --pin-stdin to avoid shell history")
@@ -412,6 +414,8 @@ func delegateCreate(args []string) {
 		Audience: *audience,
 		Human:    profile,
 		Agent:    agent,
+		TaskID:   *taskID,
+		TaskName: *task,
 		Scopes:   scopes,
 		Note:     *note,
 		TTL:      *ttl,
@@ -429,6 +433,8 @@ func delegateCreate(args []string) {
 		AgentID:      record.AgentID,
 		DelegationID: record.ID,
 		TokenID:      record.TokenID,
+		TaskID:       record.TaskID,
+		TaskName:     record.TaskName,
 		Audience:     record.Audience,
 		Scopes:       record.Scopes,
 		Note:         record.Note,
@@ -454,6 +460,9 @@ func delegateCreate(args []string) {
 		fmt.Printf("Created delegation %q\n", record.ID)
 		fmt.Printf("Agent: %s (%s)\n", record.AgentName, record.AgentID)
 		fmt.Printf("Human: %s <%s>\n", record.HumanName, record.HumanEmail)
+		if record.TaskID != "" || record.TaskName != "" {
+			fmt.Printf("Task: %s (%s)\n", record.TaskName, record.TaskID)
+		}
 		fmt.Printf("Audience: %s\n", record.Audience)
 		fmt.Printf("Scopes: %s\n", strings.Join(record.Scopes, " "))
 		fmt.Printf("Expires: %s\n", record.ExpiresAt.Format(time.RFC3339))
@@ -494,11 +503,12 @@ func delegateList(args []string) {
 		}
 		now := time.Now()
 		for _, record := range delegations {
-			fmt.Printf("%s\t%s\t%s\t%s\t%s\t%s\n",
+			fmt.Printf("%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 				record.ID,
 				record.AgentID,
 				record.Audience,
 				strings.Join(record.Scopes, " "),
+				record.TaskName,
 				delegationStatus(record, now),
 				record.ExpiresAt.Format(time.RFC3339),
 			)
@@ -535,6 +545,8 @@ func delegateRevoke(args []string) {
 		AgentID:      record.AgentID,
 		DelegationID: record.ID,
 		TokenID:      record.TokenID,
+		TaskID:       record.TaskID,
+		TaskName:     record.TaskName,
 		Audience:     record.Audience,
 		Scopes:       record.Scopes,
 	}); err != nil {
@@ -589,13 +601,14 @@ func auditList(args []string) {
 			return
 		}
 		for _, event := range events {
-			fmt.Printf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			fmt.Printf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 				event.Time.Format(time.RFC3339),
 				event.Type,
 				event.Decision,
 				event.ActorType,
 				event.HumanSub,
 				event.AgentID,
+				event.TaskName,
 				event.Resource,
 				event.Reason,
 			)
@@ -937,7 +950,7 @@ Examples:
   go run ./cmd/anyauth clients add --id my-app --name "My App" --redirect-uri http://127.0.0.1:3000/callback
   go run ./cmd/anyauth clients list
   go run ./cmd/anyauth agents add --id codex --name "Codex Local Agent"
-  go run ./cmd/anyauth delegate create --agent codex --scope app.read --format token
+  go run ./cmd/anyauth delegate create --agent codex --task "Triage issues" --scope app.read --format token
   go run ./cmd/anyauth policy add --id read-hello --effect allow --method GET --path-prefix /hello --scope app.read
   go run ./cmd/anyauth audit list
   printf "123456\n" | go run ./cmd/anyauth user set-pin --pin-stdin
@@ -987,8 +1000,8 @@ Usage:
   anyauth delegate revoke --id <id> [flags]
 
 Examples:
-  anyauth delegate create --agent codex --scope app.read
-  anyauth delegate create --agent codex --scope app.read --format token
+  anyauth delegate create --agent codex --task "Triage issues" --scope app.read
+  anyauth delegate create --agent codex --task "Triage issues" --scope app.read --format token
   anyauth delegate list
   anyauth delegate revoke --id del_...
 

@@ -97,7 +97,7 @@ Expected result:
 - Requests with a valid token reach the upstream app.
 - The upstream app shows `X-AnyAuth-Actor-Type: agent`.
 - The upstream app shows `X-AnyAuth-Agent-ID`, `X-AnyAuth-Delegation-ID`,
-  and `X-AnyAuth-Scopes`.
+  `X-AnyAuth-Task-Name`, and `X-AnyAuth-Scopes`.
 - The upstream app still receives the delegated local user through
   `X-AnyAuth-Sub`, `X-AnyAuth-Name`, and `X-AnyAuth-Email`.
 - `/admin` returns `403` because `policy-deny-admin` blocks it.

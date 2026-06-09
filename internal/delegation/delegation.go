@@ -34,6 +34,8 @@ type Delegation struct {
 	HumanEmail  string     `json:"human_email"`
 	AgentID     string     `json:"agent_id"`
 	AgentName   string     `json:"agent_name"`
+	TaskID      string     `json:"task_id,omitempty"`
+	TaskName    string     `json:"task_name,omitempty"`
 	Audience    string     `json:"audience"`
 	Scopes      []string   `json:"scopes"`
 	Note        string     `json:"note,omitempty"`
@@ -52,6 +54,8 @@ type CreateRequest struct {
 	Audience string
 	Human    userstore.Profile
 	Agent    agentregistry.Agent
+	TaskID   string
+	TaskName string
 	Scopes   []string
 	Note     string
 	TTL      time.Duration
@@ -121,6 +125,13 @@ func Create(dataDir string, req CreateRequest) (Delegation, string, error) {
 	if err != nil {
 		return Delegation{}, "", err
 	}
+	taskID := strings.TrimSpace(req.TaskID)
+	if taskID == "" && strings.TrimSpace(req.TaskName) != "" {
+		taskID, err = randomPrefixedID("task", 12)
+		if err != nil {
+			return Delegation{}, "", err
+		}
+	}
 
 	record := Delegation{
 		ID:         delegationID,
@@ -130,6 +141,8 @@ func Create(dataDir string, req CreateRequest) (Delegation, string, error) {
 		HumanEmail: req.Human.Email,
 		AgentID:    req.Agent.ID,
 		AgentName:  req.Agent.Name,
+		TaskID:     taskID,
+		TaskName:   strings.TrimSpace(req.TaskName),
 		Audience:   req.Audience,
 		Scopes:     req.Scopes,
 		Note:       strings.TrimSpace(req.Note),
@@ -153,6 +166,12 @@ func Create(dataDir string, req CreateRequest) (Delegation, string, error) {
 		"anyauth_delegation_id": record.ID,
 		"anyauth_agent_id":      record.AgentID,
 		"anyauth_agent_name":    record.AgentName,
+	}
+	if record.TaskID != "" {
+		payload["anyauth_task_id"] = record.TaskID
+	}
+	if record.TaskName != "" {
+		payload["anyauth_task_name"] = record.TaskName
 	}
 
 	token, err := jose.SignJWT(payload, req.Key, SigningID)
@@ -249,6 +268,7 @@ func ValidateToken(token string, opts ValidateOptions) (Context, error) {
 	delegationID, _ := claimString(claims, "anyauth_delegation_id")
 	tokenID, _ := claimString(claims, "jti")
 	agentID, _ := claimString(claims, "anyauth_agent_id")
+	taskID, _ := optionalClaimString(claims, "anyauth_task_id")
 	scope, _ := claimString(claims, "scope")
 
 	delegations, err := Load(opts.DataDir)
@@ -273,6 +293,9 @@ func ValidateToken(token string, opts ValidateOptions) (Context, error) {
 	}
 	if record.AgentID != agentID {
 		return Context{}, fmt.Errorf("agent id mismatch")
+	}
+	if record.TaskID != "" && record.TaskID != taskID {
+		return Context{}, fmt.Errorf("task id mismatch")
 	}
 	if record.Audience != opts.Audience {
 		return Context{}, fmt.Errorf("delegation audience mismatch")
@@ -338,6 +361,9 @@ func validateCreateRequest(req CreateRequest) error {
 	}
 	if req.Agent.Disabled {
 		return fmt.Errorf("agent %q is disabled", req.Agent.ID)
+	}
+	if req.TaskID != "" && strings.ContainsAny(req.TaskID, " \t\r\n") {
+		return fmt.Errorf("task id must not contain whitespace")
 	}
 	if len(req.Scopes) == 0 {
 		return fmt.Errorf("at least one scope is required")
@@ -409,6 +435,9 @@ func ValidateStored(record Delegation) error {
 	if record.AgentName == "" {
 		return fmt.Errorf("delegation agent name is required")
 	}
+	if record.TaskID != "" && strings.ContainsAny(record.TaskID, " \t\r\n") {
+		return fmt.Errorf("delegation task id must not contain whitespace")
+	}
 	if record.Audience == "" {
 		return fmt.Errorf("delegation audience is required")
 	}
@@ -443,6 +472,8 @@ func normalizeAll(delegations []Delegation) []Delegation {
 		out[i].HumanEmail = strings.TrimSpace(out[i].HumanEmail)
 		out[i].AgentID = strings.TrimSpace(out[i].AgentID)
 		out[i].AgentName = strings.TrimSpace(out[i].AgentName)
+		out[i].TaskID = strings.TrimSpace(out[i].TaskID)
+		out[i].TaskName = strings.TrimSpace(out[i].TaskName)
 		out[i].Audience = strings.TrimSpace(out[i].Audience)
 		out[i].Note = strings.TrimSpace(out[i].Note)
 		out[i].Scopes = normalizeScopes(out[i].Scopes)
@@ -508,6 +539,18 @@ func claimString(claims map[string]any, key string) (string, error) {
 		return "", fmt.Errorf("%s claim missing or invalid", key)
 	}
 	return value, nil
+}
+
+func optionalClaimString(claims map[string]any, key string) (string, bool) {
+	raw, ok := claims[key]
+	if !ok {
+		return "", false
+	}
+	value, ok := raw.(string)
+	if !ok || value == "" {
+		return "", false
+	}
+	return value, true
 }
 
 func claimUnix(claims map[string]any, key string) (int64, error) {

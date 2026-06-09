@@ -8,6 +8,7 @@ DATA_DIR ?= .anyauth
 PIN ?= 123456
 AGENT_ID ?= codex
 AGENT_NAME ?= Codex Local Agent
+TASK_NAME ?= Local demo task
 DELEGATION_SCOPE ?= app.read
 POLICY_ALLOW_ID ?= allow-hello
 POLICY_DENY_ID ?= deny-admin
@@ -73,7 +74,7 @@ agents-list:
 	go run ./cmd/anyauth agents list -data-dir $(DATA_DIR)
 
 delegate-token:
-	@printf "%s\n" "$(PIN)" | go run ./cmd/anyauth delegate create -data-dir $(DATA_DIR) --agent $(AGENT_ID) --provider-port $(PROVIDER_PORT) --protect-port $(PROTECT_PORT) --scope $(DELEGATION_SCOPE) --format token --pin-stdin
+	@printf "%s\n" "$(PIN)" | go run ./cmd/anyauth delegate create -data-dir $(DATA_DIR) --agent $(AGENT_ID) --provider-port $(PROVIDER_PORT) --protect-port $(PROTECT_PORT) --task "$(TASK_NAME)" --scope $(DELEGATION_SCOPE) --format token --pin-stdin
 
 delegate-list:
 	go run ./cmd/anyauth delegate list -data-dir $(DATA_DIR)

@@ -20,6 +20,8 @@ upstream app through a short-lived delegation token.
 - Persistent local client registry
 - Persistent local agent registry
 - Persistent local delegation records without storing token plaintext
+- Task metadata on delegation records, delegation tokens, upstream headers, and
+  audit events
 - Persistent local proxy policy rules
 - Local audit timeline for delegation and protected proxy decisions
 - In-memory authorization codes, access tokens, and sessions
@@ -30,6 +32,7 @@ upstream app through a short-lived delegation token.
 - Reverse proxy to one local upstream app
 - Identity headers for authenticated upstream requests
 - Agent-aware identity and delegation headers for delegated upstream requests
+- Task-aware headers for delegated upstream requests
 - Method, path-prefix, agent, and scope policies for delegated upstream requests
 - Single Go binary entrypoint through `cmd/anyauth`
 - `serve`, `protect`, and `demo` CLI commands
