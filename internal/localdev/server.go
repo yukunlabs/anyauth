@@ -26,6 +26,7 @@ import (
 	"github.com/yukunlabs/anyauth/internal/clientregistry"
 	"github.com/yukunlabs/anyauth/internal/delegation"
 	"github.com/yukunlabs/anyauth/internal/jose"
+	"github.com/yukunlabs/anyauth/internal/policy"
 	"github.com/yukunlabs/anyauth/internal/userstore"
 )
 
@@ -847,7 +848,24 @@ func (p *protectedApp) proxy(w http.ResponseWriter, r *http.Request) {
 			writeDelegationUnauthorized(w, err)
 			return
 		}
-		p.auditProxyAllow(r, identity)
+		decision, err := p.policyDecision(r, identity)
+		if err != nil {
+			p.auditProxyDeny(r, err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":             "policy_error",
+				"error_description": err.Error(),
+			})
+			return
+		}
+		if !decision.Allowed {
+			p.auditPolicyDeny(r, identity, decision)
+			writeJSON(w, http.StatusForbidden, map[string]any{
+				"error":             "access_denied",
+				"error_description": decision.Reason,
+			})
+			return
+		}
+		p.auditProxyAllow(r, identity, decision)
 		ctx := context.WithValue(r.Context(), protectSessionContextKey{}, identity)
 		p.reverseProxy.ServeHTTP(w, r.WithContext(ctx))
 		return
@@ -893,6 +911,19 @@ func (p *protectedApp) delegatedIdentity(token string) (protectIdentity, error) 
 	}, nil
 }
 
+func (p *protectedApp) policyDecision(r *http.Request, identity protectIdentity) (policy.Decision, error) {
+	rules, err := policy.Load(p.root.cfg.DataDir)
+	if err != nil {
+		return policy.Decision{}, err
+	}
+	return policy.Evaluate(rules, policy.Request{
+		Method:  r.Method,
+		Path:    r.URL.Path,
+		AgentID: identity.AgentID,
+		Scopes:  identity.Scopes,
+	}), nil
+}
+
 func identityFromSession(session protectSession) protectIdentity {
 	return protectIdentity{
 		ActorType:  "human",
@@ -922,7 +953,7 @@ func writeDelegationUnauthorized(w http.ResponseWriter, err error) {
 	})
 }
 
-func (p *protectedApp) auditProxyAllow(r *http.Request, identity protectIdentity) {
+func (p *protectedApp) auditProxyAllow(r *http.Request, identity protectIdentity, decision policy.Decision) {
 	p.appendAudit(auditlog.Event{
 		Type:         "proxy.allow",
 		Decision:     "allow",
@@ -934,6 +965,23 @@ func (p *protectedApp) auditProxyAllow(r *http.Request, identity protectIdentity
 		Audience:     delegation.AudienceForProtectPort(p.port),
 		Scopes:       identity.Scopes,
 		Resource:     r.URL.RequestURI(),
+		Reason:       decision.Reason,
+	})
+}
+
+func (p *protectedApp) auditPolicyDeny(r *http.Request, identity protectIdentity, decision policy.Decision) {
+	p.appendAudit(auditlog.Event{
+		Type:         "proxy.deny",
+		Decision:     "deny",
+		ActorType:    identity.ActorType,
+		HumanSub:     identity.HumanSub,
+		AgentID:      identity.AgentID,
+		DelegationID: identity.DelegationID,
+		TokenID:      identity.TokenID,
+		Audience:     delegation.AudienceForProtectPort(p.port),
+		Scopes:       identity.Scopes,
+		Resource:     r.URL.RequestURI(),
+		Reason:       decision.Reason,
 	})
 }
 

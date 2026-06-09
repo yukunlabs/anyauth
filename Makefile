@@ -9,8 +9,10 @@ PIN ?= 123456
 AGENT_ID ?= codex
 AGENT_NAME ?= Codex Local Agent
 DELEGATION_SCOPE ?= app.read
+POLICY_ALLOW_ID ?= allow-hello
+POLICY_DENY_ID ?= deny-admin
 
-.PHONY: fmt fmt-check test build script-check smoke-protect smoke-agent-protect verify ci run demo protect protect-agent dev-upstream user-show set-pin clear-pin agent-add agents-list delegate-token delegate-list audit-list clean clean-state
+.PHONY: fmt fmt-check test build script-check smoke-protect smoke-agent-protect smoke-policy-protect verify ci run demo protect protect-agent dev-upstream user-show set-pin clear-pin agent-add agents-list delegate-token delegate-list policy-allow-hello policy-deny-admin policies-list audit-list clean clean-state
 
 fmt:
 	gofmt -w cmd internal
@@ -33,9 +35,12 @@ smoke-protect:
 smoke-agent-protect:
 	go test ./internal/localdev -run TestProtectGatewayWithDelegation -v
 
-verify: fmt test build smoke-protect smoke-agent-protect script-check
+smoke-policy-protect:
+	go test ./internal/localdev -run TestProtectGatewayEnforcesPolicy -v
 
-ci: fmt-check test build smoke-protect smoke-agent-protect script-check
+verify: fmt test build smoke-protect smoke-agent-protect smoke-policy-protect script-check
+
+ci: fmt-check test build smoke-protect smoke-agent-protect smoke-policy-protect script-check
 
 run:
 	go run ./cmd/anyauth serve -provider-port $(PROVIDER_PORT) -data-dir $(DATA_DIR)
@@ -72,6 +77,15 @@ delegate-token:
 
 delegate-list:
 	go run ./cmd/anyauth delegate list -data-dir $(DATA_DIR)
+
+policy-allow-hello:
+	go run ./cmd/anyauth policy add -data-dir $(DATA_DIR) --id $(POLICY_ALLOW_ID) --effect allow --method GET --path-prefix /hello --scope $(DELEGATION_SCOPE)
+
+policy-deny-admin:
+	go run ./cmd/anyauth policy add -data-dir $(DATA_DIR) --id $(POLICY_DENY_ID) --effect deny --path-prefix /admin
+
+policies-list:
+	go run ./cmd/anyauth policy list -data-dir $(DATA_DIR)
 
 audit-list:
 	go run ./cmd/anyauth audit list -data-dir $(DATA_DIR)

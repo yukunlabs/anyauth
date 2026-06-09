@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/yukunlabs/anyauth/internal/clientregistry"
 	"github.com/yukunlabs/anyauth/internal/delegation"
 	"github.com/yukunlabs/anyauth/internal/jose"
+	"github.com/yukunlabs/anyauth/internal/policy"
 	"github.com/yukunlabs/anyauth/internal/userstore"
 )
 
@@ -522,6 +524,133 @@ func TestProtectGatewayWithDelegation(t *testing.T) {
 	}
 }
 
+func TestProtectGatewayEnforcesPolicy(t *testing.T) {
+	dataDir := t.TempDir()
+	providerPort := freePort(t)
+	protectPort := freePort(t)
+	agent, err := agentregistry.Add(dataDir, agentregistry.Agent{
+		ID:   "codex",
+		Name: "Codex Local Agent",
+		Kind: "cli",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := policy.Add(dataDir, policy.Rule{
+		ID:             "allow-allowed",
+		Effect:         policy.EffectAllow,
+		Methods:        []string{http.MethodGet},
+		PathPrefix:     "/allowed",
+		RequiredScopes: []string{"app.read"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := policy.Add(dataDir, policy.Rule{
+		ID:         "deny-admin",
+		Effect:     policy.EffectDeny,
+		PathPrefix: "/admin",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	key, err := jose.LoadOrCreateRSAKey(filepath.Join(dataDir, "dev-private-key.pem"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, readToken, err := delegation.Create(dataDir, delegation.CreateRequest{
+		Issuer:   delegation.IssuerForProviderPort(providerPort),
+		Audience: delegation.AudienceForProtectPort(protectPort),
+		Human:    userstore.DefaultProfile(),
+		Agent:    agent,
+		Scopes:   []string{"app.read"},
+		TTL:      30 * time.Minute,
+		Key:      key,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, writeToken, err := delegation.Create(dataDir, delegation.CreateRequest{
+		Issuer:   delegation.IssuerForProviderPort(providerPort),
+		Audience: delegation.AudienceForProtectPort(protectPort),
+		Human:    userstore.DefaultProfile(),
+		Agent:    agent,
+		Scopes:   []string{"app.write"},
+		TTL:      30 * time.Minute,
+		Key:      key,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var upstreamHits int64
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&upstreamHits, 1)
+		fmt.Fprintf(w, "path=%s agent=%s scopes=%s",
+			r.URL.String(),
+			r.Header.Get("X-AnyAuth-Agent-ID"),
+			r.Header.Get("X-AnyAuth-Scopes"),
+		)
+	}))
+	defer upstream.Close()
+
+	cfg := Config{
+		ProviderPort:      providerPort,
+		ProtectPort:       protectPort,
+		ProtectUpstream:   upstream.URL,
+		DataDir:           dataDir,
+		RequireDelegation: true,
+	}
+	servers, cfg, err := Start(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := servers.Shutdown(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	client := &http.Client{}
+	gateway := "http://127.0.0.1:" + itoa(cfg.ProtectPort)
+
+	body := mustGetBearerBody(t, client, gateway+"/allowed/doc", readToken, http.StatusOK)
+	if !strings.Contains(body, "path=/allowed/doc") || !strings.Contains(body, "scopes=app.read") {
+		t.Fatalf("allowed response missing expected data: %s", body)
+	}
+	body = mustGetBearerBody(t, client, gateway+"/allowed/doc", writeToken, http.StatusForbidden)
+	if !strings.Contains(body, "missing required scope") {
+		t.Fatalf("expected missing scope denial, got %s", body)
+	}
+	body = mustGetBearerBody(t, client, gateway+"/admin", readToken, http.StatusForbidden)
+	if !strings.Contains(body, "matched deny policy deny-admin") {
+		t.Fatalf("expected deny policy denial, got %s", body)
+	}
+	body = mustGetBearerBody(t, client, gateway+"/unmatched", readToken, http.StatusForbidden)
+	if !strings.Contains(body, "no matching allow policy") {
+		t.Fatalf("expected default policy denial, got %s", body)
+	}
+	if got := atomic.LoadInt64(&upstreamHits); got != 1 {
+		t.Fatalf("upstream hits = %d, want only the allowed request to reach upstream", got)
+	}
+
+	events, err := auditlog.Load(dataDir, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 4 {
+		t.Fatalf("audit event count = %d, want 4: %+v", len(events), events)
+	}
+	if events[0].Type != "proxy.allow" || !strings.Contains(events[0].Reason, "allow-allowed") {
+		t.Fatalf("unexpected allow audit event: %+v", events[0])
+	}
+	for _, event := range events[1:] {
+		if event.Type != "proxy.deny" || event.Decision != "deny" || event.AgentID != "codex" {
+			t.Fatalf("unexpected deny audit event: %+v", event)
+		}
+	}
+}
+
 func TestProtectRejectsInvalidUpstream(t *testing.T) {
 	cfg := Config{
 		ProviderPort:    freePort(t),
@@ -615,6 +744,28 @@ func mustGetBody(t *testing.T, client *http.Client, target string, status int) s
 	if err != nil {
 		t.Fatal(err)
 	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != status {
+		t.Fatalf("GET %s status = %d, want %d, body: %s", target, resp.StatusCode, status, string(raw))
+	}
+	return string(raw)
+}
+
+func mustGetBearerBody(t *testing.T, client *http.Client, target string, token string, status int) string {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, target, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)

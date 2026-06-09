@@ -111,8 +111,11 @@ Terminal 3:
 
 ```bash
 make agent-add
+make policy-allow-hello
+make policy-deny-admin
 TOKEN=$(make delegate-token)
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7200/hello?x=1
+curl -i -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7200/admin
 make audit-list
 ```
 
@@ -136,6 +139,10 @@ X-AnyAuth-Scopes: app.read
 
 Without a valid delegation token, `protect-agent` returns `401` instead of
 redirecting to the browser login flow.
+
+Once policies exist, `protect-agent` defaults to deny unless a matching allow
+policy applies. `policy-allow-hello` allows `GET /hello*` for `app.read`, while
+`policy-deny-admin` blocks `/admin*`.
 
 `audit-list` shows local delegation and proxy allow/deny events without storing
 the delegation token plaintext.
@@ -228,6 +235,7 @@ The current prototype includes:
 - Persistent local client registry
 - Persistent local agent registry
 - Short-lived agent delegation tokens
+- Local path/method/scope policies for delegated agent requests
 - Local audit timeline for delegation and protected proxy events
 - Client and user management CLI commands
 - ID token signing with a locally generated RSA key
@@ -268,6 +276,7 @@ make test
 make build
 make smoke-protect
 make smoke-agent-protect
+make smoke-policy-protect
 make run
 make demo
 make protect
@@ -275,6 +284,9 @@ make protect-agent
 make dev-upstream
 make agent-add
 make delegate-token
+make policy-allow-hello
+make policy-deny-admin
+make policies-list
 make audit-list
 make clean
 make clean-state

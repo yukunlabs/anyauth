@@ -16,6 +16,7 @@ import (
 	"github.com/yukunlabs/anyauth/internal/delegation"
 	"github.com/yukunlabs/anyauth/internal/jose"
 	"github.com/yukunlabs/anyauth/internal/localdev"
+	"github.com/yukunlabs/anyauth/internal/policy"
 	"github.com/yukunlabs/anyauth/internal/userstore"
 )
 
@@ -40,6 +41,8 @@ func main() {
 		delegate(os.Args[2:])
 	case "audit":
 		audit(os.Args[2:])
+	case "policy":
+		policyCommand(os.Args[2:])
 	case "user":
 		user(os.Args[2:])
 	case "version":
@@ -603,6 +606,140 @@ func auditList(args []string) {
 	}
 }
 
+func policyCommand(args []string) {
+	if len(args) < 1 {
+		policyUsage()
+		os.Exit(2)
+	}
+
+	switch args[0] {
+	case "add":
+		policyAdd(args[1:])
+	case "list":
+		policyList(args[1:])
+	case "remove":
+		policyRemove(args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "unknown policy command: %s\n\n", args[0])
+		policyUsage()
+		os.Exit(2)
+	}
+}
+
+func policyAdd(args []string) {
+	fs := flag.NewFlagSet("policy add", flag.ExitOnError)
+	dataDir := fs.String("data-dir", ".anyauth", "local AnyAuth data directory")
+	id := fs.String("id", "", "policy id")
+	effect := fs.String("effect", "allow", "policy effect: allow or deny")
+	pathPrefix := fs.String("path-prefix", "", "request path prefix, for example /private")
+	agentID := fs.String("agent", "", "optional agent id this policy applies to")
+	description := fs.String("description", "", "optional policy description")
+	var methods repeatString
+	var scopes repeatString
+	fs.Var(&methods, "method", "HTTP method; repeat for multiple methods; omit for all")
+	fs.Var(&scopes, "scope", "required delegation scope; repeat for multiple scopes")
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+
+	rule, err := policy.Add(*dataDir, policy.Rule{
+		ID:             *id,
+		Description:    *description,
+		Effect:         policy.Effect(*effect),
+		Methods:        methods,
+		PathPrefix:     *pathPrefix,
+		AgentID:        *agentID,
+		RequiredScopes: scopes,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Added policy %q\n", rule.ID)
+	fmt.Printf("Effect: %s\n", rule.Effect)
+	fmt.Printf("Path prefix: %s\n", rule.PathPrefix)
+	if len(rule.Methods) > 0 {
+		fmt.Printf("Methods: %s\n", strings.Join(rule.Methods, ", "))
+	}
+	if rule.AgentID != "" {
+		fmt.Printf("Agent: %s\n", rule.AgentID)
+	}
+	if len(rule.RequiredScopes) > 0 {
+		fmt.Printf("Required scopes: %s\n", strings.Join(rule.RequiredScopes, " "))
+	}
+}
+
+func policyList(args []string) {
+	fs := flag.NewFlagSet("policy list", flag.ExitOnError)
+	dataDir := fs.String("data-dir", ".anyauth", "local AnyAuth data directory")
+	format := fs.String("format", "table", "output format: table or json")
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+
+	rules, err := policy.Load(*dataDir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	switch *format {
+	case "json":
+		raw, err := json.MarshalIndent(rules, "", "  ")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Println(string(raw))
+	case "table":
+		if len(rules) == 0 {
+			fmt.Println("No policies configured.")
+			return
+		}
+		for _, rule := range rules {
+			methods := "*"
+			if len(rule.Methods) > 0 {
+				methods = strings.Join(rule.Methods, ",")
+			}
+			fmt.Printf("%s\t%s\t%s\t%s\t%s\t%s\n",
+				rule.ID,
+				rule.Effect,
+				methods,
+				rule.PathPrefix,
+				rule.AgentID,
+				strings.Join(rule.RequiredScopes, " "),
+			)
+		}
+	default:
+		fmt.Fprintf(os.Stderr, "unknown format: %s\n", *format)
+		os.Exit(2)
+	}
+}
+
+func policyRemove(args []string) {
+	fs := flag.NewFlagSet("policy remove", flag.ExitOnError)
+	dataDir := fs.String("data-dir", ".anyauth", "local AnyAuth data directory")
+	id := fs.String("id", "", "policy id")
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	if *id == "" {
+		fmt.Fprintln(os.Stderr, "--id is required")
+		os.Exit(2)
+	}
+
+	rule, err := policy.Remove(*dataDir, *id)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Printf("Removed policy %q\n", rule.ID)
+}
+
 func user(args []string) {
 	if len(args) < 1 {
 		userUsage()
@@ -784,6 +921,8 @@ Usage:
   anyauth agents list [flags]
   anyauth delegate create --agent <id> [flags]
   anyauth delegate list [flags]
+  anyauth policy add --id <id> --path-prefix <path> [flags]
+  anyauth policy list [flags]
   anyauth audit list [flags]
   anyauth user show [flags]
   anyauth user set-pin [flags]
@@ -799,6 +938,7 @@ Examples:
   go run ./cmd/anyauth clients list
   go run ./cmd/anyauth agents add --id codex --name "Codex Local Agent"
   go run ./cmd/anyauth delegate create --agent codex --scope app.read --format token
+  go run ./cmd/anyauth policy add --id read-hello --effect allow --method GET --path-prefix /hello --scope app.read
   go run ./cmd/anyauth audit list
   printf "123456\n" | go run ./cmd/anyauth user set-pin --pin-stdin
   go run ./cmd/anyauth user clear-pin
@@ -865,6 +1005,23 @@ Examples:
   anyauth audit list
   anyauth audit list --limit 20
   anyauth audit list --format json
+
+`)
+}
+
+func policyUsage() {
+	fmt.Print(`Manage local AnyAuth proxy policies.
+
+Usage:
+  anyauth policy add --id <id> --path-prefix <path> [flags]
+  anyauth policy list [flags]
+  anyauth policy remove --id <id> [flags]
+
+Examples:
+  anyauth policy add --id read-hello --effect allow --method GET --path-prefix /hello --scope app.read
+  anyauth policy add --id block-admin --effect deny --path-prefix /admin
+  anyauth policy list
+  anyauth policy remove --id read-hello
 
 `)
 }

@@ -77,8 +77,11 @@ Terminal 3:
 
 ```bash
 make agent-add
+make policy-allow-hello
+make policy-deny-admin
 TOKEN=$(make delegate-token)
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7200/hello?x=1
+curl -i -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7200/admin
 make audit-list
 ```
 
@@ -97,15 +100,41 @@ Expected result:
   and `X-AnyAuth-Scopes`.
 - The upstream app still receives the delegated local user through
   `X-AnyAuth-Sub`, `X-AnyAuth-Name`, and `X-AnyAuth-Email`.
+- `/admin` returns `403` because `policy-deny-admin` blocks it.
 - `audit-list` shows delegation creation and proxy allow/deny events.
 
 Automated smoke coverage:
 
 ```bash
 make smoke-agent-protect
+make smoke-policy-protect
 ```
 
-## 4. Protocol Demo Smoke Test
+## 4. Policy Behavior
+
+Use this when changing delegated-agent authorization policy behavior.
+
+Rules are stored in local `policies.json`. When no policies are configured,
+delegated agent requests are allowed after token validation. Once at least one
+policy exists, the proxy defaults to deny unless a matching allow policy applies.
+Deny policies take priority.
+
+Useful commands:
+
+```bash
+make policy-allow-hello
+make policy-deny-admin
+make policies-list
+```
+
+Expected result:
+
+- `GET /hello...` is allowed for a token with `app.read`.
+- `/admin...` is denied.
+- Any unmatched path is denied once policies exist.
+- Policy decisions appear in `audit-list`.
+
+## 5. Protocol Demo Smoke Test
 
 Use this when changing OAuth/OIDC flow behavior.
 
@@ -125,7 +154,7 @@ Expected result:
 - Demo App B reuses the provider SSO session.
 - PIN verification is required if a PIN is configured.
 
-## 5. Local State Checks
+## 6. Local State Checks
 
 Show the local user:
 

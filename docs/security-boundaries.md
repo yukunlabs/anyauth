@@ -13,6 +13,7 @@ be treated as production identity infrastructure.
 - Agent registry is stored as local JSON in the AnyAuth data directory.
 - Agent delegation records are stored as local JSON in the AnyAuth data
   directory.
+- Proxy policy rules are stored as local JSON in the AnyAuth data directory.
 - Audit events are stored as local JSON Lines in the AnyAuth data directory.
 - Local user profile is stored as local JSON in the AnyAuth data directory.
 - Sessions, codes, and tokens are in-memory.
@@ -42,6 +43,10 @@ be treated as production identity infrastructure.
   from agent traffic.
 - In agent delegation mode, the protected proxy removes the incoming
   `Authorization` header before forwarding to the upstream app.
+- In agent delegation mode, the protected proxy can enforce local method,
+  path-prefix, agent, and scope policies before forwarding to the upstream app.
+- When policy rules exist, deny rules take priority and unmatched delegated
+  agent requests are denied.
 - Delegation creation, revocation, protected proxy allow, and protected proxy
   deny events are appended to a local audit timeline.
 - Access tokens must be presented as Bearer tokens for UserInfo.
@@ -57,15 +62,16 @@ be treated as production identity infrastructure.
 - No phishing-resistant local user verification.
 - No conformance test suite.
 - Client secrets are stored in local plaintext JSON.
-- Agent metadata and delegation records are stored in local plaintext JSON.
+- Agent metadata, delegation records, and policy rules are stored in local
+  plaintext JSON.
 - Audit events are stored in local plaintext JSON Lines.
 - Delegation tokens are Bearer tokens. Anyone who obtains one can use it until
   it expires or is revoked.
 - Delegation token creation is a local CLI action, not a full interactive
   consent workflow.
-- Delegation scopes are advisory labels in the current prototype. Upstream apps
-  can read the injected scope header, but AnyAuth does not yet enforce
-  operation-level policies inside the upstream app.
+- Proxy policies currently cover HTTP method, path prefix, agent id, and
+  delegation scopes. They do not inspect request bodies or enforce
+  operation-level policy inside the upstream app.
 - Protected upstream apps can still be reached directly if they listen on an
   accessible port; the proxy only protects traffic that enters through AnyAuth.
 - Protected upstream apps must treat `X-AnyAuth-*` headers as trusted only when
