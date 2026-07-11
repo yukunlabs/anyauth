@@ -1,192 +1,92 @@
 # AnyAuth
 
-AnyAuth is a local-first authentication and agent authorization hub for
-developers and solo builders.
+AnyAuth is a local identity and authorization hub for software and agents you
+control.
 
-Repository: https://github.com/yukunlabs/anyauth
+It gives local apps one development identity, puts browser or agent traffic
+behind an authentication proxy, and lets a human approve a specific agent
+action on a specific resource for a limited time.
 
-The prototype runs a local OpenID Connect-style provider, protects apps you own
-behind a local SSO gateway, and lets a local user approve semantic, time-bound
-actions for registered agents.
+> **Project status:** experimental local prototype. AnyAuth binds to loopback
+> by default and is not production identity infrastructure.
 
-## What This Is
+## Why AnyAuth
 
-- A local SSO hub for development and self-hosted environments.
-- A protocol-compatible playground for apps you control.
-- A local approval and authorization decision point for semantic Agent actions.
-- A foundation for future auth modes such as passkeys, forward-auth, upstream
-  identity brokers, and auth integration tests.
+Authentication answers **who is this?** Agentic software adds a second
+question: **what may this agent do, for which task, and for how long?**
 
-## What This Is Not
-
-- It is not a Google/GitHub/Apple login replacement.
-- It cannot log you into arbitrary third-party websites.
-- The current prototype is not production-grade security software.
-- The semantic decision API is not yet an authenticated remote enforcement
-  boundary or action executor.
-
-## Run The Local Provider
-
-Requirements:
-
-- Go 1.22+
-
-Start the provider:
-
-```bash
-make run
-```
-
-Open:
-
-- Provider: http://127.0.0.1:7100
-
-`serve` is provider-first: it does not start the built-in demo apps. Use this
-mode when connecting AnyAuth to apps you own.
-
-## Protect A Local App
-
-Start any local web app, then put AnyAuth in front of it:
-
-```bash
-make protect
-```
-
-Open:
-
-- Protected app: http://127.0.0.1:7200
-- Provider: http://127.0.0.1:7100
-
-The protected proxy signs you in through AnyAuth before forwarding traffic to
-the upstream app. Authenticated upstream requests receive:
+AnyAuth explores both questions in one local system:
 
 ```text
-X-AnyAuth-Authenticated: true
-X-AnyAuth-Sub: local-user
-X-AnyAuth-Name: Local User
-X-AnyAuth-Email: local.user@anyauth.local
+Browser ── OIDC / session ───────────────┐
+                                         ├──> AnyAuth ──> apps you control
+Agent ─── delegation token ──> proxy ────┤
+                                         │
+Agent ─── action request ──> approval ───┘──> grant + allow/deny decision
 ```
 
-Use this when you want to put SSO in front of a local app without wiring OIDC
-into that app yet.
+The current prototype supports four practical development workflows:
 
-For a quick manual test, run the bundled upstream test app in one terminal:
+| Need | AnyAuth capability |
+| --- | --- |
+| Test login across local apps | Local OIDC-style provider and two-app SSO demo |
+| Add login in front of an existing app | Reverse proxy with trusted identity headers |
+| Let an agent call a local HTTP service | Short-lived delegation token plus method/path/scope policy |
+| Approve an application-level agent action | Typed action request, browser approval, expiring grant, and decision API |
+
+The last workflow is the main product direction. It models authority as
+`actor + human + application + action + resource + task + lifetime`, rather
+than treating an agent as the human or granting it an unbounded credential.
+
+## Quick Start
+
+Requirements: Go 1.22 or later.
+
+Start the built-in provider and two demo apps:
 
 ```bash
-make dev-upstream
+make demo
 ```
 
-Then run the protected proxy in another terminal:
+Then open:
+
+- Provider: <http://127.0.0.1:7100>
+- Demo App A: <http://127.0.0.1:7101>
+- Demo App B: <http://127.0.0.1:7102>
+
+Log in to App A, then open App B. The second app should reuse the provider
+session without asking you to log in again.
+
+AnyAuth keeps development identity state in `.anyauth/`. To start again with a
+fresh local identity and key, stop the process and run:
 
 ```bash
-make protect
+make clean-state
 ```
 
-Open `http://127.0.0.1:7200/hello?x=1`. After login, the upstream page should
-show the request path and `X-AnyAuth-*` identity headers.
+## Try Semantic Agent Authorization
 
-Override ports or upstream URL when needed:
+This flow demonstrates the part of AnyAuth that goes beyond local SSO.
 
-```bash
-make dev-upstream UPSTREAM_PORT=4000
-make protect UPSTREAM=http://127.0.0.1:4000 PROTECT_PORT=7400
-```
-
-## Authorize An Agent For A Local App
-
-AnyAuth can also protect an upstream app for agent traffic. A registered agent
-gets a short-lived delegation token, then calls the protected proxy with
-`Authorization: Bearer <token>`. The upstream app receives both the local human
-identity and the explicit agent/delegation identity.
-
-Terminal 1:
-
-```bash
-make dev-upstream
-```
-
-Terminal 2:
-
-```bash
-make protect-agent
-```
-
-Terminal 3:
-
-```bash
-make agent-add
-make policy-allow-hello
-make policy-deny-admin
-TOKEN=$(make delegate-token)
-curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7200/hello?x=1
-curl -i -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7200/admin
-make audit-list
-```
-
-If your local profile uses a custom PIN, pass it to the token target:
-
-```bash
-TOKEN=$(make delegate-token PIN=654321)
-```
-
-The upstream app should show headers such as:
-
-```text
-X-AnyAuth-Authenticated: true
-X-AnyAuth-Actor-Type: agent
-X-AnyAuth-Sub: local-user
-X-AnyAuth-Human-Sub: local-user
-X-AnyAuth-Agent-ID: codex
-X-AnyAuth-Delegation-ID: del_...
-X-AnyAuth-Task-ID: task_...
-X-AnyAuth-Task-Name: Local demo task
-X-AnyAuth-Scopes: app.read
-```
-
-Without a valid delegation token, `protect-agent` returns `401` instead of
-redirecting to the browser login flow.
-
-Once policies exist, `protect-agent` defaults to deny unless a matching allow
-policy applies. `policy-allow-hello` allows `GET /hello*` for `app.read`, while
-`policy-deny-admin` blocks `/admin*`.
-
-`audit-list` shows local delegation and proxy allow/deny events without storing
-the delegation token plaintext.
-
-## Approve A Semantic Agent Action
-
-AnyAuth can model application actions and resources independently from HTTP
-paths. A registered agent submits a request, the local user reviews it in the
-provider UI, and an approved grant can be checked through the local decision
-API.
-
-Register an agent and an application capability:
+Register the example agent and application capability, then start the provider:
 
 ```bash
 make agent-add
 make application-add
-```
-
-An authorization application is a semantic action/resource catalog. It is
-separate from an OIDC client registration.
-
-Start the provider:
-
-```bash
 make run
 ```
 
-In another terminal, request authority:
+In another terminal, submit an authorization request:
 
 ```bash
 make authz-request
 ```
 
-Open `http://127.0.0.1:7100/approvals`, review the requested action and
-resource, then approve or deny it. If a local PIN is configured, approval
-requires that PIN.
+Open <http://127.0.0.1:7100/approvals>. The page shows the agent, human,
+application, action, resource, task, and requested lifetime. Approve or deny the
+request; if you configured a local PIN, the decision requires it.
 
-After approval, check the exact action:
+After approval, evaluate the exact action and inspect the resulting state:
 
 ```bash
 make authz-check
@@ -195,154 +95,190 @@ make authz-grants
 make audit-list
 ```
 
-Revoke an approved grant when it is no longer needed:
+The default example asks whether `agent:codex`, acting for the local user, may
+perform `issue.create` on `repository:yukunlabs/anyauth` for the task
+`local-authz-demo`. AnyAuth records and evaluates that authority; it does not
+execute the GitHub action.
+
+Revoke a grant with:
 
 ```bash
 go run ./cmd/anyauth authz revoke --id grt_...
 ```
 
-The default example asks whether `agent:codex`, acting for the local user, may
-perform `issue.create` on `repository:yukunlabs/anyauth` for task
-`local-authz-demo`.
-
-The decision endpoint is:
+The local decision endpoint is:
 
 ```text
 POST http://127.0.0.1:7100/access/v1/evaluation
 ```
 
-Its `subject` / `action` / `resource` / `context` decision shape follows the
-OpenID AuthZEN Authorization API model. AnyAuth currently adds required
-`actor` and `application_id` fields and does not yet implement the complete
-AuthZEN API or PEP authentication, so this is an AuthZEN-shaped local prototype
-rather than a conformant deployment.
+Its subject/action/resource/context shape is inspired by the OpenID AuthZEN
+Authorization API. The prototype adds explicit actor and application fields and
+is not a complete or conformant AuthZEN deployment.
 
-## Run The Local Demo
+## Protect A Local App
 
-Start the provider and two demo apps:
+AnyAuth can add browser login in front of an app that does not implement OIDC.
+
+Start the bundled upstream test app:
 
 ```bash
-make demo
+make dev-upstream
 ```
 
-Open:
+In another terminal, start the protected proxy:
 
-- Provider: http://127.0.0.1:7100
-- Demo App A: http://127.0.0.1:7101
-- Demo App B: http://127.0.0.1:7102
+```bash
+make protect
+```
 
-Try App A first, click login, continue as the local user, then open App B.
-App B should complete login through the same provider session without asking
-you to log in again.
+Open <http://127.0.0.1:7200/hello?x=1>. AnyAuth signs in the local user and
+forwards the request with `X-AnyAuth-*` identity headers.
 
-## Register Your Own Local App
+Point the proxy at another local service when needed:
 
-Add a client:
+```bash
+make protect UPSTREAM=http://127.0.0.1:4000 PROTECT_PORT=7400
+```
+
+The upstream must only trust `X-AnyAuth-*` headers on traffic that actually
+arrived through the AnyAuth proxy.
+
+## Delegate Local HTTP Access To An Agent
+
+The protected proxy can require a short-lived agent delegation token instead
+of a browser session. The upstream receives both the human identity and the
+agent, task, delegation, and scope context.
+
+Start the upstream and agent-aware proxy in separate terminals:
+
+```bash
+make dev-upstream
+```
+
+```bash
+make protect-agent
+```
+
+Then create the local policy and token:
+
+```bash
+make agent-add
+make policy-allow-hello
+make policy-deny-admin
+TOKEN=$(make delegate-token)
+
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://127.0.0.1:7200/hello?x=1"
+
+curl -i -H "Authorization: Bearer $TOKEN" \
+  "http://127.0.0.1:7200/admin"
+
+make audit-list
+```
+
+The `/hello` request is allowed for the `app.read` scope. The `/admin` request
+is denied by policy. Once any proxy policies exist, unmatched delegated agent
+requests default to deny.
+
+If the local profile uses a different PIN, pass it while creating the token:
+
+```bash
+TOKEN=$(make delegate-token PIN=654321)
+```
+
+## Connect An OIDC Client
+
+Register an app you own:
 
 ```bash
 go run ./cmd/anyauth clients add \
   --id my-app \
   --name "My App" \
   --redirect-uri http://127.0.0.1:3000/callback
-```
 
-List clients:
-
-```bash
-go run ./cmd/anyauth clients list
-```
-
-Then start AnyAuth with the same data directory:
-
-```bash
 make run
 ```
 
-Use the generated client secret and this issuer in your app:
+Use the generated development client secret with these endpoints:
 
 ```text
-Issuer: http://127.0.0.1:7100
-Authorization endpoint: http://127.0.0.1:7100/authorize
-Token endpoint: http://127.0.0.1:7100/token
-JWKS URI: http://127.0.0.1:7100/jwks.json
-UserInfo endpoint: http://127.0.0.1:7100/userinfo
+Issuer:                http://127.0.0.1:7100
+Authorization:         http://127.0.0.1:7100/authorize
+Token:                 http://127.0.0.1:7100/token
+JWKS:                  http://127.0.0.1:7100/jwks.json
+UserInfo:              http://127.0.0.1:7100/userinfo
+Discovery:             http://127.0.0.1:7100/.well-known/openid-configuration
 ```
 
-## Configure Local PIN Verification
+The prototype implements a deliberately small Authorization Code + PKCE path.
+Evaluate a mature OAuth/OIDC library and conformance coverage before using this
+protocol core beyond local development.
 
-AnyAuth can require a local PIN before it creates the provider SSO session.
+## Local PIN
 
-Show the local user profile:
+A local PIN can gate creation of the provider session and approval of semantic
+agent actions:
 
 ```bash
 make user-show
-```
-
-Set a PIN:
-
-```bash
 make set-pin PIN=123456
-```
-
-After a PIN is configured, the provider login page will require that PIN before
-redirecting back to the client app.
-
-Clear the PIN and return to the no-PIN development login:
-
-```bash
 make clear-pin
 ```
 
-## Initial Scope
+The PIN is optional and is stored as a salted PBKDF2-SHA256 verifier. It is a
+local development safeguard, not phishing-resistant authentication.
 
-The current prototype includes:
+## Security Boundary
 
-- OIDC discovery metadata
-- JWKS endpoint
-- Authorization Code flow with PKCE
-- Local provider session
-- Optional local PIN verification
-- Persistent local client registry
-- Persistent local agent registry
-- Short-lived agent delegation tokens
-- Task-scoped delegation metadata in tokens, headers, and audit events
-- Local path/method/scope policies for delegated agent requests
-- Semantic application, action, resource, request, approval, and grant model
-- Local approval page for semantic agent actions
-- AuthZEN-shaped local access evaluation endpoint
-- Local audit timeline for delegation and protected proxy events
-- Client and user management CLI commands
-- ID token signing with a locally generated RSA key
-- UserInfo endpoint
-- Protected reverse proxy mode with identity headers
-- Agent-aware protected proxy mode with delegation headers
-- Demo mode with two built-in clients
+AnyAuth is currently designed for one local operator and apps bound to or
+reachable through the local machine. In particular:
 
-See [docs/mvp-scope.md](docs/mvp-scope.md) and
-[docs/security-boundaries.md](docs/security-boundaries.md).
+- it cannot make arbitrary third-party websites trust your local identity;
+- local JSON state, client secrets, agent metadata, and audit records are not a
+  production persistence or key-management system;
+- delegation tokens are Bearer tokens until they expire or are revoked;
+- protected apps remain reachable directly unless you separately restrict
+  their listening address or network path;
+- the semantic request and decision APIs are local prototype interfaces, not
+  authenticated remote policy-enforcement boundaries;
+- approving an action creates authority data—it does not execute the action.
 
-## Stack Direction
+Read [docs/security-boundaries.md](docs/security-boundaries.md) before using
+AnyAuth for anything beyond local experimentation.
 
-AnyAuth starts with Go and server-rendered local UI:
+## Current Scope
 
-- Go fits the long-term shape: CLI, local daemon, protocol server, reverse proxy
-  integrations, and single-binary distribution.
-- The first UI is intentionally server-rendered to avoid requiring Node for the
-  local tool.
-- A TypeScript/React console can be added later when the product needs complex
-  dashboards, visual test reports, or workflow editing.
+Implemented today:
 
-See [docs/stack-decision.md](docs/stack-decision.md).
+- local provider session, discovery, JWKS, UserInfo, and Authorization Code flow
+  with PKCE;
+- optional local PIN verification and persistent local client/user state;
+- browser and agent-aware protected proxy modes;
+- registered agents, short-lived task-scoped delegation tokens, revocation,
+  proxy policy, and audit events;
+- semantic applications, typed actions/resources, authorization requests,
+  browser approval, expiring and revocable grants, parent/child attenuation,
+  and default-deny evaluation;
+- a single Go process with server-rendered local UI and no third-party Go
+  dependencies.
+
+Not implemented includes production storage or key management, passkeys,
+refresh tokens, multi-user or multi-tenant administration, upstream social
+login, complete OIDC/AuthZEN conformance, remote approval workflows, and
+automatic execution of approved actions.
+
+See [docs/mvp-scope.md](docs/mvp-scope.md) for the complete scope.
 
 ## Development
 
-Use the full local verification gate before committing:
+Run the full local verification gate:
 
 ```bash
 make verify
 ```
 
-The main development commands are:
+Common targets:
 
 ```bash
 make fmt
@@ -351,31 +287,18 @@ make build
 make smoke-protect
 make smoke-agent-protect
 make smoke-policy-protect
-make run
-make demo
-make protect
-make protect-agent
-make dev-upstream
-make agent-add
-make delegate-token
-make policy-allow-hello
-make policy-deny-admin
-make policies-list
-make audit-list
+make smoke-authz
 make clean
 make clean-state
 ```
 
-Build a local binary:
+Further reading:
 
-```bash
-go build -o bin/anyauth ./cmd/anyauth
-```
-
-During the experimental phase, every commit should be a closed loop and release
-tags should only be created when explicitly planned. See
-[docs/development-process.md](docs/development-process.md).
-
-See [docs/testing.md](docs/testing.md) for the product smoke test flow.
+- [Product brief](docs/product-brief.md)
+- [MVP scope](docs/mvp-scope.md)
+- [Security boundaries](docs/security-boundaries.md)
+- [Testing workflow](docs/testing.md)
+- [Stack decision](docs/stack-decision.md)
+- [Development process](docs/development-process.md)
 
 AI agents should start with [AGENTS.md](AGENTS.md).
