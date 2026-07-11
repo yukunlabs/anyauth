@@ -16,22 +16,27 @@ import (
 const FileName = "audit.jsonl"
 
 type Event struct {
-	ID           string    `json:"id"`
-	Time         time.Time `json:"time"`
-	Type         string    `json:"type"`
-	Decision     string    `json:"decision"`
-	ActorType    string    `json:"actor_type,omitempty"`
-	HumanSub     string    `json:"human_sub,omitempty"`
-	AgentID      string    `json:"agent_id,omitempty"`
-	DelegationID string    `json:"delegation_id,omitempty"`
-	TokenID      string    `json:"token_id,omitempty"`
-	TaskID       string    `json:"task_id,omitempty"`
-	TaskName     string    `json:"task_name,omitempty"`
-	Audience     string    `json:"audience,omitempty"`
-	Scopes       []string  `json:"scopes,omitempty"`
-	Resource     string    `json:"resource,omitempty"`
-	Reason       string    `json:"reason,omitempty"`
-	Note         string    `json:"note,omitempty"`
+	ID            string    `json:"id"`
+	Time          time.Time `json:"time"`
+	Type          string    `json:"type"`
+	Decision      string    `json:"decision"`
+	ActorType     string    `json:"actor_type,omitempty"`
+	HumanSub      string    `json:"human_sub,omitempty"`
+	AgentID       string    `json:"agent_id,omitempty"`
+	DelegationID  string    `json:"delegation_id,omitempty"`
+	TokenID       string    `json:"token_id,omitempty"`
+	DecisionID    string    `json:"decision_id,omitempty"`
+	ApplicationID string    `json:"application_id,omitempty"`
+	Action        string    `json:"action,omitempty"`
+	ResourceType  string    `json:"resource_type,omitempty"`
+	GrantIDs      []string  `json:"grant_ids,omitempty"`
+	TaskID        string    `json:"task_id,omitempty"`
+	TaskName      string    `json:"task_name,omitempty"`
+	Audience      string    `json:"audience,omitempty"`
+	Scopes        []string  `json:"scopes,omitempty"`
+	Resource      string    `json:"resource,omitempty"`
+	Reason        string    `json:"reason,omitempty"`
+	Note          string    `json:"note,omitempty"`
 }
 
 func Path(dataDir string) string {
@@ -138,6 +143,11 @@ func normalize(event Event) Event {
 	event.AgentID = strings.TrimSpace(event.AgentID)
 	event.DelegationID = strings.TrimSpace(event.DelegationID)
 	event.TokenID = strings.TrimSpace(event.TokenID)
+	event.DecisionID = strings.TrimSpace(event.DecisionID)
+	event.ApplicationID = strings.TrimSpace(event.ApplicationID)
+	event.Action = strings.TrimSpace(event.Action)
+	event.ResourceType = strings.TrimSpace(event.ResourceType)
+	event.GrantIDs = normalizeScopes(event.GrantIDs)
 	event.TaskID = strings.TrimSpace(event.TaskID)
 	event.TaskName = strings.TrimSpace(event.TaskName)
 	event.Audience = strings.TrimSpace(event.Audience)

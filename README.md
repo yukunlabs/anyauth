@@ -1,17 +1,19 @@
 # AnyAuth
 
-AnyAuth is a local-first authentication hub for developers and solo builders.
+AnyAuth is a local-first authentication and agent authorization hub for
+developers and solo builders.
 
 Repository: https://github.com/yukunlabs/anyauth
 
-The first milestone is intentionally small: run a local OpenID Connect-style
-provider, protect apps you own behind a local SSO gateway, and use built-in demo
-apps to validate the flow.
+The prototype runs a local OpenID Connect-style provider, protects apps you own
+behind a local SSO gateway, and lets a local user approve semantic, time-bound
+actions for registered agents.
 
 ## What This Is
 
 - A local SSO hub for development and self-hosted environments.
 - A protocol-compatible playground for apps you control.
+- A local approval and authorization decision point for semantic Agent actions.
 - A foundation for future auth modes such as passkeys, forward-auth, upstream
   identity brokers, and auth integration tests.
 
@@ -20,6 +22,8 @@ apps to validate the flow.
 - It is not a Google/GitHub/Apple login replacement.
 - It cannot log you into arbitrary third-party websites.
 - The current prototype is not production-grade security software.
+- The semantic decision API is not yet an authenticated remote enforcement
+  boundary or action executor.
 
 ## Run The Local Provider
 
@@ -149,6 +153,70 @@ policy applies. `policy-allow-hello` allows `GET /hello*` for `app.read`, while
 `audit-list` shows local delegation and proxy allow/deny events without storing
 the delegation token plaintext.
 
+## Approve A Semantic Agent Action
+
+AnyAuth can model application actions and resources independently from HTTP
+paths. A registered agent submits a request, the local user reviews it in the
+provider UI, and an approved grant can be checked through the local decision
+API.
+
+Register an agent and an application capability:
+
+```bash
+make agent-add
+make application-add
+```
+
+An authorization application is a semantic action/resource catalog. It is
+separate from an OIDC client registration.
+
+Start the provider:
+
+```bash
+make run
+```
+
+In another terminal, request authority:
+
+```bash
+make authz-request
+```
+
+Open `http://127.0.0.1:7100/approvals`, review the requested action and
+resource, then approve or deny it. If a local PIN is configured, approval
+requires that PIN.
+
+After approval, check the exact action:
+
+```bash
+make authz-check
+make authz-requests
+make authz-grants
+make audit-list
+```
+
+Revoke an approved grant when it is no longer needed:
+
+```bash
+go run ./cmd/anyauth authz revoke --id grt_...
+```
+
+The default example asks whether `agent:codex`, acting for the local user, may
+perform `issue.create` on `repository:yukunlabs/anyauth` for task
+`local-authz-demo`.
+
+The decision endpoint is:
+
+```text
+POST http://127.0.0.1:7100/access/v1/evaluation
+```
+
+Its `subject` / `action` / `resource` / `context` decision shape follows the
+OpenID AuthZEN Authorization API model. AnyAuth currently adds required
+`actor` and `application_id` fields and does not yet implement the complete
+AuthZEN API or PEP authentication, so this is an AuthZEN-shaped local prototype
+rather than a conformant deployment.
+
 ## Run The Local Demo
 
 Start the provider and two demo apps:
@@ -239,6 +307,9 @@ The current prototype includes:
 - Short-lived agent delegation tokens
 - Task-scoped delegation metadata in tokens, headers, and audit events
 - Local path/method/scope policies for delegated agent requests
+- Semantic application, action, resource, request, approval, and grant model
+- Local approval page for semantic agent actions
+- AuthZEN-shaped local access evaluation endpoint
 - Local audit timeline for delegation and protected proxy events
 - Client and user management CLI commands
 - ID token signing with a locally generated RSA key

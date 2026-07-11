@@ -37,6 +37,10 @@ func main() {
 		clients(os.Args[2:])
 	case "agents":
 		agents(os.Args[2:])
+	case "applications":
+		applications(os.Args[2:])
+	case "authz":
+		authorization(os.Args[2:])
 	case "delegate":
 		delegate(os.Args[2:])
 	case "audit":
@@ -601,7 +605,7 @@ func auditList(args []string) {
 			return
 		}
 		for _, event := range events {
-			fmt.Printf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			fmt.Printf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 				event.Time.Format(time.RFC3339),
 				event.Type,
 				event.Decision,
@@ -609,6 +613,8 @@ func auditList(args []string) {
 				event.HumanSub,
 				event.AgentID,
 				event.TaskName,
+				event.ApplicationID,
+				event.Action,
 				event.Resource,
 				event.Reason,
 			)
@@ -932,6 +938,13 @@ Usage:
   anyauth clients list [flags]
   anyauth agents add --id <id> --name <name> [flags]
   anyauth agents list [flags]
+  anyauth applications add --id <id> --action <action> --resource-type <type> [flags]
+  anyauth applications list [flags]
+  anyauth authz request --agent <id> --application <id> --action <action> [flags]
+  anyauth authz check --agent <id> --application <id> --action <action> [flags]
+  anyauth authz requests [flags]
+  anyauth authz grants [flags]
+  anyauth authz revoke --id <grant-id> [flags]
   anyauth delegate create --agent <id> [flags]
   anyauth delegate list [flags]
   anyauth policy add --id <id> --path-prefix <path> [flags]
@@ -950,6 +963,8 @@ Examples:
   go run ./cmd/anyauth clients add --id my-app --name "My App" --redirect-uri http://127.0.0.1:3000/callback
   go run ./cmd/anyauth clients list
   go run ./cmd/anyauth agents add --id codex --name "Codex Local Agent"
+  go run ./cmd/anyauth applications add --id github --action issue.create --resource-type repository
+  go run ./cmd/anyauth authz request --agent codex --application github --action issue.create --resource-type repository --resource yukunlabs/anyauth
   go run ./cmd/anyauth delegate create --agent codex --task "Triage issues" --scope app.read --format token
   go run ./cmd/anyauth policy add --id read-hello --effect allow --method GET --path-prefix /hello --scope app.read
   go run ./cmd/anyauth audit list

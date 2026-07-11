@@ -12,8 +12,15 @@ TASK_NAME ?= Local demo task
 DELEGATION_SCOPE ?= app.read
 POLICY_ALLOW_ID ?= allow-hello
 POLICY_DENY_ID ?= deny-admin
+AUTHZ_APPLICATION_ID ?= github
+AUTHZ_APPLICATION_NAME ?= GitHub
+AUTHZ_ACTION ?= issue.create
+AUTHZ_RESOURCE_TYPE ?= repository
+AUTHZ_RESOURCE_ID ?= yukunlabs/anyauth
+AUTHZ_TASK_ID ?= local-authz-demo
+AUTHZ_TASK ?= Improve AnyAuth authorization
 
-.PHONY: fmt fmt-check test build script-check smoke-protect smoke-agent-protect smoke-policy-protect verify ci run demo protect protect-agent dev-upstream user-show set-pin clear-pin agent-add agents-list delegate-token delegate-list policy-allow-hello policy-deny-admin policies-list audit-list clean clean-state
+.PHONY: fmt fmt-check test build script-check smoke-protect smoke-agent-protect smoke-policy-protect smoke-authz verify ci run demo protect protect-agent dev-upstream user-show set-pin clear-pin agent-add agents-list delegate-token delegate-list policy-allow-hello policy-deny-admin policies-list application-add applications-list authz-request authz-check authz-requests authz-grants audit-list clean clean-state
 
 fmt:
 	gofmt -w cmd internal
@@ -39,9 +46,12 @@ smoke-agent-protect:
 smoke-policy-protect:
 	go test ./internal/localdev -run TestProtectGatewayEnforcesPolicy -v
 
-verify: fmt test build smoke-protect smoke-agent-protect smoke-policy-protect script-check
+smoke-authz:
+	go test ./internal/localdev -run TestSemanticAuthorizationApprovalFlow -v
 
-ci: fmt-check test build smoke-protect smoke-agent-protect smoke-policy-protect script-check
+verify: fmt test build smoke-protect smoke-agent-protect smoke-policy-protect smoke-authz script-check
+
+ci: fmt-check test build smoke-protect smoke-agent-protect smoke-policy-protect smoke-authz script-check
 
 run:
 	go run ./cmd/anyauth serve -provider-port $(PROVIDER_PORT) -data-dir $(DATA_DIR)
@@ -87,6 +97,24 @@ policy-deny-admin:
 
 policies-list:
 	go run ./cmd/anyauth policy list -data-dir $(DATA_DIR)
+
+application-add:
+	go run ./cmd/anyauth applications add -data-dir $(DATA_DIR) --id $(AUTHZ_APPLICATION_ID) --name "$(AUTHZ_APPLICATION_NAME)" --action $(AUTHZ_ACTION) --resource-type $(AUTHZ_RESOURCE_TYPE)
+
+applications-list:
+	go run ./cmd/anyauth applications list -data-dir $(DATA_DIR)
+
+authz-request:
+	go run ./cmd/anyauth authz request --provider-url http://127.0.0.1:$(PROVIDER_PORT) --agent $(AGENT_ID) --application $(AUTHZ_APPLICATION_ID) --action $(AUTHZ_ACTION) --resource-type $(AUTHZ_RESOURCE_TYPE) --resource $(AUTHZ_RESOURCE_ID) --task-id $(AUTHZ_TASK_ID) --task "$(AUTHZ_TASK)"
+
+authz-check:
+	go run ./cmd/anyauth authz check -data-dir $(DATA_DIR) --provider-url http://127.0.0.1:$(PROVIDER_PORT) --agent $(AGENT_ID) --application $(AUTHZ_APPLICATION_ID) --action $(AUTHZ_ACTION) --resource-type $(AUTHZ_RESOURCE_TYPE) --resource $(AUTHZ_RESOURCE_ID) --task-id $(AUTHZ_TASK_ID)
+
+authz-requests:
+	go run ./cmd/anyauth authz requests -data-dir $(DATA_DIR)
+
+authz-grants:
+	go run ./cmd/anyauth authz grants -data-dir $(DATA_DIR)
 
 audit-list:
 	go run ./cmd/anyauth audit list -data-dir $(DATA_DIR)

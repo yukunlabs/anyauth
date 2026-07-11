@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/yukunlabs/anyauth/internal/auditlog"
+	"github.com/yukunlabs/anyauth/internal/authzstore"
 	"github.com/yukunlabs/anyauth/internal/clientregistry"
 	"github.com/yukunlabs/anyauth/internal/delegation"
 	"github.com/yukunlabs/anyauth/internal/jose"
@@ -44,13 +45,14 @@ type Config struct {
 }
 
 type app struct {
-	cfg        Config
-	issuer     string
-	signingKey *rsa.PrivateKey
-	store      *store
-	clients    map[string]client
-	user       user
-	profile    userstore.Profile
+	cfg           Config
+	issuer        string
+	signingKey    *rsa.PrivateKey
+	store         *store
+	clients       map[string]client
+	user          user
+	profile       userstore.Profile
+	authorization *authzstore.Store
 }
 
 type client struct {
@@ -240,7 +242,8 @@ func Start(cfg Config) (*ServerSet, Config, error) {
 			Name:  profile.Name,
 			Email: profile.Email,
 		},
-		profile: profile,
+		profile:       profile,
+		authorization: authzstore.New(cfg.DataDir),
 	}
 	a.clients = map[string]client{}
 	if cfg.DemoApps {
@@ -335,6 +338,10 @@ func (a *app) providerMux() http.Handler {
 	mux.HandleFunc("/login", a.login)
 	mux.HandleFunc("/token", a.token)
 	mux.HandleFunc("/userinfo", a.userinfo)
+	mux.HandleFunc("/approvals", a.approvals)
+	mux.HandleFunc("/approvals/", a.approvalAction)
+	mux.HandleFunc("/api/authorization-requests", a.authorizationRequests)
+	mux.HandleFunc("/access/v1/evaluation", a.accessEvaluation)
 	return mux
 }
 
@@ -376,6 +383,7 @@ func (a *app) providerHome(w http.ResponseWriter, r *http.Request) {
 <ul>
   <li><a href="/.well-known/openid-configuration">Discovery metadata</a></li>
   <li><a href="/jwks.json">JWKS</a></li>
+  <li><a href="/approvals">Agent authorization approvals</a></li>
   %s
 </ul>
 <h2>Registered clients</h2>

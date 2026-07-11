@@ -2,15 +2,17 @@
 
 ## Positioning
 
-AnyAuth is a local-first authentication hub that gives any app you own instant
-SSO, mock identity, and protocol-compatible login for development and
-self-hosted environments.
+AnyAuth is a local-first authentication and authorization hub that gives apps
+you own SSO, mock identity, and a local decision point for time-bound Agent
+actions in development and self-hosted environments.
 
 ## Core User
 
 - Solo builders creating multiple apps.
 - Developers testing auth integrations locally.
 - Self-hosters who want one local identity hub for their own tools.
+- Developers who want an Agent to act on an application without treating the
+  Agent as the Human or granting an unbounded semantic permission.
 
 ## Core Scenario
 
@@ -32,6 +34,13 @@ proxy handles login and forwards authenticated requests with identity headers,
 so the upstream app can receive a trusted local user without implementing OIDC
 itself.
 
+For agent actions that have application meaning beyond an HTTP path, an
+application can declare semantic actions and resource types. A registered agent
+requests one action on one resource for a task, the local user approves or
+denies it, and a policy enforcement point asks AnyAuth for an allow/deny
+decision. Approved grants are time-bound, revocable, and included in the local
+audit timeline.
+
 ## Operating Modes
 
 - `serve` starts only the local provider and is the default path for real apps
@@ -40,6 +49,8 @@ itself.
   upstream app.
 - `demo` starts the provider plus two built-in demo apps for validating SSO
   behavior without creating a separate test application.
+- The provider also serves the local semantic authorization request, approval,
+  and decision endpoints in every operating mode.
 
 ## Product Boundaries
 

@@ -2,11 +2,11 @@
 
 ## Goal
 
-Build a runnable local provider that proves AnyAuth can act as an identity hub
-for apps owned by the same developer, a protected proxy mode for local apps, and
-a built-in demo mode for local SSO validation. The MVP also proves a first
-agent authorization path where a registered local agent can access a protected
-upstream app through a short-lived delegation token.
+Build a runnable local provider that proves AnyAuth can act as an identity and
+authorization hub for apps owned by the same developer. The MVP includes a
+protected proxy, a built-in SSO demo, short-lived Agent delegation for HTTP
+traffic, and a semantic authorization path where the local user approves a
+time-bound Agent action on a typed application resource.
 
 ## In Scope
 
@@ -23,6 +23,14 @@ upstream app through a short-lived delegation token.
 - Task metadata on delegation records, delegation tokens, upstream headers, and
   audit events
 - Persistent local proxy policy rules
+- Persistent semantic authorization applications, requests, and grants
+- Semantic actions and typed resources independent from HTTP paths
+- Local browser approval or denial of agent authorization requests
+- Optional PIN verification for semantic authorization decisions
+- AuthZEN-shaped single access evaluation endpoint
+- Default-deny semantic grant evaluation with task, expiry, and revocation
+  checks
+- Parent/child grant attenuation rules in the authorization core
 - Local audit timeline for delegation and protected proxy decisions
 - In-memory authorization codes, access tokens, and sessions
 - Discovery endpoint
@@ -38,6 +46,9 @@ upstream app through a short-lived delegation token.
 - `serve`, `protect`, and `demo` CLI commands
 - `clients add` and `clients list` CLI commands
 - `agents add`, `agents list`, and `agents remove` CLI commands
+- `applications add` and `applications list` CLI commands
+- `authz request`, `authz check`, `authz requests`, `authz grants`, and
+  `authz revoke` CLI commands
 - `delegate create`, `delegate list`, and `delegate revoke` CLI commands
 - `policy add`, `policy list`, and `policy remove` CLI commands
 - `audit list` CLI command
@@ -57,7 +68,10 @@ upstream app through a short-lived delegation token.
 - Arbitrary third-party website login
 - Request body inspection and operation-level policy enforcement inside
   upstream apps
-- Full interactive approval UI for agent actions
+- Multi-step, multi-approver, or remote approval workflows
+- Complete OpenID AuthZEN API conformance or authenticated remote PEP access
+- Credential issuance from semantic grants
+- Automatic execution of approved semantic actions
 
 ## Success Criteria
 
@@ -73,6 +87,10 @@ upstream app through a short-lived delegation token.
   delegated requests before the upstream app is reached.
 - Delegation creation, proxy allow, proxy deny, and delegation revocation can be
   inspected through `audit list`.
+- A registered agent can request a declared application action on a typed
+  resource, the local user can approve it in the provider UI, and the local
+  evaluation endpoint allows the exact action until the grant expires or is
+  revoked.
 - The provider exposes standard-looking OIDC metadata and JWKS.
 - The repo explains the security boundary clearly.
 - The first implementation has no third-party Go dependencies.

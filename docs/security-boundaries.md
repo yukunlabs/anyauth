@@ -15,6 +15,8 @@ be treated as production identity infrastructure.
   directory.
 - Proxy policy rules are stored as local JSON in the AnyAuth data directory.
 - Audit events are stored as local JSON Lines in the AnyAuth data directory.
+- Semantic authorization applications, requests, and grants are stored in one
+  local JSON file in the AnyAuth data directory.
 - Local user profile is stored as local JSON in the AnyAuth data directory.
 - Sessions, codes, and tokens are in-memory.
 - When configured, the login screen requires a local PIN before creating the
@@ -54,10 +56,21 @@ be treated as production identity infrastructure.
 - Access tokens must be presented as Bearer tokens for UserInfo.
 - PINs are stored as salted PBKDF2-SHA256 verifiers, not plaintext.
 - PIN verification is optional and can be disabled with `user clear-pin`.
+- Semantic grants are scoped to one actor, human subject, application, action,
+  resource selector, optional task, and validity window.
+- Semantic authorization is default-deny and validates the complete parent
+  grant chain. A child grant cannot broaden its parent's action, resource,
+  application, subject, task binding, or lifetime.
+- Semantic access decisions are audited with a decision id and determining
+  grant ids. A decision fails closed if its grant source or decision audit write
+  fails.
+- Browser approval POSTs reject a mismatched `Origin` or `Referer`, and require
+  the local PIN when one is configured.
 
 ## Known Gaps
 
-- No CSRF hardening beyond OAuth `state`.
+- No general CSRF token framework. Semantic approval POSTs perform local
+  origin/referrer validation, while the OAuth flow relies on `state`.
 - No session persistence or secure local key management.
 - No refresh-token rotation.
 - No key rotation.
@@ -83,11 +96,26 @@ be treated as production identity infrastructure.
 - A local PIN is weaker than passkeys or OS-backed biometric verification.
 - ID token claim validation handles only the simple v0 shape, not all OIDC edge
   cases such as array audiences, `azp`, or clock skew policy.
+- The semantic authorization request and evaluation APIs bind only to the local
+  provider and do not yet authenticate the requesting agent or policy
+  enforcement point. Caller-supplied actor identity is suitable only for this
+  local development prototype.
+- When no PIN is configured, semantic approval relies on an explicit action in
+  the local browser plus same-origin request checks; it is not strong user
+  verification.
+- Approved semantic grants are server-side decision records. AnyAuth does not
+  yet project them into a holder-bound credential or execute the approved
+  upstream action.
+- The JSON authorization store is atomic per write but does not provide
+  cross-process transactions or production concurrency guarantees.
 
 ## Intended Next Security Milestones
 
-1. Add passkey or OS credential prompt verification.
-2. Replace local plaintext secrets and in-memory state with an encrypted store.
-3. Add structured protocol tests and negative cases.
-4. Add refresh token rotation.
-5. Evaluate replacing the prototype core with a mature OIDC library.
+1. Authenticate agents and policy enforcement points for semantic requests and
+   decisions.
+2. Project approved grants into sender-constrained or holder-bound credentials.
+3. Add passkey or OS credential prompt verification.
+4. Replace local plaintext secrets and in-memory state with an encrypted store.
+5. Add structured protocol tests and negative cases.
+6. Add refresh token rotation.
+7. Evaluate replacing the prototype core with a mature OIDC library.

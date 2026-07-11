@@ -4,9 +4,11 @@ This file is the entry point for AI agents working on AnyAuth.
 
 ## Project Intent
 
-AnyAuth is an experimental local-first authentication hub for apps owned by the
-developer. It is currently a local development prototype, not production
-identity infrastructure.
+AnyAuth is an experimental local-first authentication and authorization hub for
+apps owned by the developer. In addition to local SSO, it explores minimal,
+time-bound, revocable, and auditable authority for agents acting on behalf of
+the local user. It is currently a local development prototype, not production
+identity or authorization infrastructure.
 
 Read these files before changing behavior:
 

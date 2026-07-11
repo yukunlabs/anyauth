@@ -27,11 +27,16 @@ func TestAppendAndLoadEvents(t *testing.T) {
 	}
 
 	second, err := Append(dataDir, Event{
-		Time:     now.Add(time.Minute),
-		Type:     "proxy.allow",
-		Decision: "allow",
-		AgentID:  "codex",
-		Resource: "/hello",
+		Time:          now.Add(time.Minute),
+		Type:          "authorization.decision",
+		Decision:      "allow",
+		DecisionID:    "dec_test",
+		ApplicationID: "github",
+		Action:        "issue.create",
+		ResourceType:  "repository",
+		GrantIDs:      []string{"grt_test", "grt_test"},
+		AgentID:       "codex",
+		Resource:      "yukunlabs/anyauth",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -49,6 +54,10 @@ func TestAppendAndLoadEvents(t *testing.T) {
 	}
 	if strings.Join(events[0].Scopes, " ") != "app.read" {
 		t.Fatalf("scopes were not normalized: %+v", events[0].Scopes)
+	}
+	if events[1].DecisionID != "dec_test" || events[1].ApplicationID != "github" ||
+		events[1].Action != "issue.create" || strings.Join(events[1].GrantIDs, " ") != "grt_test" {
+		t.Fatalf("semantic authorization fields were not preserved: %+v", events[1])
 	}
 
 	events, err = Load(dataDir, 1)

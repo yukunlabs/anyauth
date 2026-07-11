@@ -110,7 +110,57 @@ make smoke-agent-protect
 make smoke-policy-protect
 ```
 
-## 4. Policy Behavior
+## 4. Semantic Authorization Approval
+
+Use this when changing application actions, authorization requests, approvals,
+grants, or the local decision API.
+
+```bash
+make agent-add
+make application-add
+make run
+```
+
+In another terminal:
+
+```bash
+make authz-request
+```
+
+Open `http://127.0.0.1:7100/approvals`, approve the request, then run:
+
+```bash
+make authz-check
+make authz-requests
+make authz-grants
+make audit-list
+```
+
+Copy the grant id from `authz-grants`, revoke it, and repeat the check:
+
+```bash
+go run ./cmd/anyauth authz revoke --id grt_...
+make authz-check
+```
+
+Expected result:
+
+- The request shows the Agent, Human, Application, Action, Resource, Task, and
+  requested lifetime.
+- A configured PIN is required before approval or denial.
+- The exact approved action returns `Decision: true`.
+- A different action, resource, task, actor, or application returns a deny
+  decision or validation error.
+- Revoking the grant changes the same check to `Decision: false`.
+- Request, approval, and access decisions appear in the audit timeline.
+
+Automated smoke coverage:
+
+```bash
+make smoke-authz
+```
+
+## 5. Policy Behavior
 
 Use this when changing delegated-agent authorization policy behavior.
 
@@ -134,7 +184,7 @@ Expected result:
 - Any unmatched path is denied once policies exist.
 - Policy decisions appear in `audit-list`.
 
-## 5. Protocol Demo Smoke Test
+## 6. Protocol Demo Smoke Test
 
 Use this when changing OAuth/OIDC flow behavior.
 
@@ -154,7 +204,7 @@ Expected result:
 - Demo App B reuses the provider SSO session.
 - PIN verification is required if a PIN is configured.
 
-## 6. Local State Checks
+## 7. Local State Checks
 
 Show the local user:
 
